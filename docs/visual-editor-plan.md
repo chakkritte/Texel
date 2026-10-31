@@ -96,7 +96,7 @@ destroy unsupported LaTeX.
   switches back to source mode at the corresponding line.
 - Errors from the round-trip parser appear in a problems panel.
 
-## Current status (Phase 3.1 + 3.2a/b/c + 3.3 delivered)
+## Current status (Phase 3.1 + 3.2a/b/c + 3.3 + 3.4a/b delivered)
 
 Visual mode now has two tabs: **Document** (the visual editor) and **PDF**.
 
@@ -122,16 +122,22 @@ Implemented with:
   its original environment name.
 - Citation/reference/label keys are rendered as chips; clicking one opens a key
   editor that replaces only the key source range.
+- `.bib` files in the project are parsed; citation chips show the matching
+  entry metadata and a searchable picker lets authors select keys.
 - `\includegraphics` images are resolved from project files through the
   authenticated download endpoint and displayed as blob URLs. Missing assets
   render a placeholder.
-- Simple `tabular` tables are rendered visually (read-only) with captions and
-  labels; table editing remains source-only.
+- Simple `tabular`/`tabularx`/`longtable` tables are editable cell by cell,
+  including tables inside `table` floats. Captions, labels and column specs are
+  preserved; unsupported tables remain read-only.
 - Visual edits carry an expected source slice. If a remote collaborator changed
   that range first, the edit is rejected and a conflict notice is shown instead
   of clobbering the other change.
-- Complex blocks (mixed math paragraphs for text, labeled/nested lists, table
-  cells, unknown macros) are rendered read-only with an "Edit in source" jump.
+- Focused editable blocks publish an awareness `editingBlock` range. Other
+  clients show a "Locked by …" overlay and cannot edit the same block.
+- Complex blocks (mixed math paragraphs for text, labeled/nested lists, complex
+  table cells, unknown macros) are rendered read-only with an "Edit in source"
+  jump.
 
 Known limitations of this phase:
 
@@ -141,12 +147,13 @@ Known limitations of this phase:
   macros remain read-only.
 - Formatting is limited to the supported emphasis commands; colors, font sizes,
   links and arbitrary macros are source-only.
-- Citations are not resolved against `.bib` entries; only their keys are
-  editable.
-- Table cells, captions and column specs are source-only.
+- Tables using `\hline`, `\multicolumn`, `\multirow`, math or citations are
+  read-only; table captions/labels are not editable from the visual view.
+- `.bib` resolution powers the picker and chip metadata; reference numbering is
+  not resolved.
 - Only the active file is rendered; `\input`/`\include` are not expanded.
-- Collaboration safety is source-range based, not a ProseMirror/Yjs visual
-  document model.
+- Collaboration uses source ranges plus awareness locks, not a full
+  ProseMirror/Yjs visual document model.
 - Unknown macros degrade to text or empty spans.
 
 ## Delivery phases
@@ -182,10 +189,19 @@ Known limitations of this phase:
 - Full Yjs/ProseMirror collaboration model and source ↔ visual cursor mapping
   (pending; current visual edits go through CodeMirror/Yjs source ranges).
 
-### Phase 3.4 — Hardening (2 weeks)
+### Phase 3.4 — Editable tables, `.bib` resolution and collaboration (delivered subset)
 
-- Fuzz/round-trip corpus, performance on large documents, accessibility,
-  undo/redo, conflict handling and user documentation.
+- Editable simple `tabular`/`tabularx`/`longtable` cells, including tables
+  inside `table` floats; captions, labels and column specs preserved
+  (delivered).
+- `.bib` parser, citation-chip metadata and searchable citation picker
+  (delivered).
+- Awareness-based `editingBlock` locks plus the expected-source conflict guard
+  (delivered).
+- Full ProseMirror + Y.XmlFragment visual CRDT and source ↔ visual cursor
+  mapping (pending; this is a separate architectural project).
+- Hardening: fuzz/round-trip corpus, performance on large documents,
+  accessibility and undo/redo (pending).
 
 ## Test strategy
 

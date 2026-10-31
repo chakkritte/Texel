@@ -13,6 +13,8 @@ import FileTree, { type FileT, type FolderT, type TreeT } from '../components/Fi
 import UploadDialog, { type UploadFolder } from '../components/UploadDialog'
 import ProjectNameDialog from '../components/ProjectNameDialog'
 import EquationDialog, { type EquationMode } from '../components/EquationDialog'
+import CitationDialog from '../components/CitationDialog'
+import { parseBibtex, type BibEntry } from '../lib/bibtex'
 import PdfViewer, { type PdfHighlight } from '../components/pdf/PdfViewer'
 import HistoryPanel from '../components/history/HistoryPanel'
 import CommentsPanel from '../components/history/CommentsPanel'
@@ -136,6 +138,11 @@ export default function Editor() {
   } | null>(null)
   const [visualConflict, setVisualConflict] = useState(false)
   const [referenceEdit, setReferenceEdit] = useState<VisualRefNode | null>(null)
+  const [citationEdit, setCitationEdit] = useState<{
+    ref: VisualRefNode
+    keys: string[]
+  } | null>(null)
+  const [bibEntries, setBibEntries] = useState<BibEntry[]>([])
   const assetCacheRef = useRef<Map<string, string>>(new Map())
   const [equationOpen, setEquationOpen] = useState(false)
   const [equationNonce, setEquationNonce] = useState(0)
@@ -224,12 +231,39 @@ export default function Editor() {
 
   // Selection context belongs to the file it was made in.
   useEffect(() => {
+    let alive = true
+    const bibFiles = tree.files.filter(
+      (file) => file.kind === 'doc' && /\.bib$/i.test(file.name),
+    )
+    if (bibFiles.length === 0) {
+      setBibEntries([])
+      return
+    }
+    Promise.all(
+      bibFiles.map((file) =>
+        api<{ content: string }>(`/files/${file.id}/content`).catch(() => null),
+      ),
+    ).then((rows) => {
+      if (!alive) return
+      const text = rows
+        .filter((row): row is { content: string } => Boolean(row))
+        .map((row) => row.content)
+        .join('\n')
+      setBibEntries(parseBibtex(text))
+    })
+    return () => {
+      alive = false
+    }
+  }, [tree.files])
+
+  useEffect(() => {
     setAiSelection(null)
     setAiRequest(null)
     setEditorSelection(null)
     setEquationOpen(false)
     setEquationEdit(null)
     setReferenceEdit(null)
+    setCitationEdit(null)
     setReplaceRequest(null)
     setVisualConflict(false)
   }, [active?.id])
@@ -263,6 +297,16 @@ export default function Editor() {
   }
 
   function editVisualRef(ref: VisualRefNode) {
+    if (ref.kind === 'cite' && bibEntries.length > 0) {
+      setCitationEdit({
+        ref,
+        keys: ref.value
+          .split(',')
+          .map((key) => key.trim())
+          .filter(Boolean),
+      })
+      return
+    }
     setReferenceEdit(ref)
   }
 
@@ -1480,6 +1524,10 @@ export default function Editor() {
                       <VisualEditor
                         content={content}
                         fileName={active.name}
+                        bibEntries={bibEntries}
+                        awareness={collab.synced ? collab.awareness : null}
+                        fileId={active.id}
+                        userLabel={user?.display_name || user?.email || ''}
                         resolveAsset={resolveAsset}
                         onEditBlock={editVisualBlock}
                         onEditSource={editSourceAt}
@@ -1594,6 +1642,24 @@ export default function Editor() {
             nonce: Date.now(),
           })
           setReferenceEdit(null)
+        }}
+      />
+
+      <CitationDialog
+        open={Boolean(citationEdit)}
+        entries={bibEntries}
+        initialKeys={citationEdit?.keys ?? []}
+        onClose={() => setCitationEdit(null)}
+        onSave={(keys) => {
+          if (!citationEdit) return
+          setReplaceRequest({
+            from: citationEdit.ref.from,
+            to: citationEdit.ref.to,
+            text: keys.join(','),
+            expected: citationEdit.ref.raw,
+            nonce: Date.now(),
+          })
+          setCitationEdit(null)
         }}
       />
     </div>

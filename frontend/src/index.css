@@ -311,13 +311,29 @@ body {
   font-size: 0.78em;
   padding: 0 0.4em;
 }
-.latex-visual .macro-caption {
+.latex-visual .macro-caption,
+.latex-visual .table-caption {
   color: #111827;
   display: block;
   font-family: var(--font-display);
   font-size: 0.9em;
   font-weight: 600;
   margin: 0.8em 0 0.35em;
+}
+.latex-visual table.editable-tabular {
+  border-collapse: collapse;
+  margin: 0.4em auto 1em;
+  width: auto;
+}
+.latex-visual table.editable-tabular td {
+  border: 1px solid #d1d5db;
+  min-width: 2.5em;
+  padding: 0.3em 0.6em;
+  vertical-align: top;
+}
+.latex-visual button.macro-label {
+  border: 0;
+  font-family: var(--font-mono);
 }
 .latex-visual .environment.table {
   margin: 1em 0;

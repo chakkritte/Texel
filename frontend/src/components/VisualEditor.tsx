@@ -1,4 +1,4 @@
-import { createElement, useEffect, useMemo, useRef } from 'react'
+import { createElement, useEffect, useMemo, useRef, useState } from 'react'
 import type { ClipboardEvent, FocusEvent, KeyboardEvent, ReactNode } from 'react'
 import { unified } from 'unified'
 import { unifiedLatexFromString } from '@unified-latex/unified-latex-util-parse'
@@ -10,6 +10,8 @@ import {
   nodeText,
   renderMathIn,
 } from '../lib/latexVisual'
+import { formatBibEntry, type BibEntry } from '../lib/bibtex'
+import type { Awareness } from 'y-protocols/awareness'
 
 const SECTION_LEVELS: Record<string, 2 | 3 | 4> = {
   section: 2,
@@ -57,10 +59,28 @@ const INLINE_FORMATS: Record<string, { tag: string }> = {
   textsc: { tag: 'span' },
 }
 
+type TableData = {
+  rows: InlineNode[][][]
+  prefix: string
+  suffix: string
+  spec: string
+  envFrom: number
+  envTo: number
+  expected: string
+}
+
 type Block =
   | { kind: 'heading'; level: 2 | 3 | 4; text: string; from: number; to: number }
   | { kind: 'formatted'; model: InlineNode[]; from: number; to: number }
   | { kind: 'list'; ordered: boolean; items: InlineNode[][]; from: number; to: number }
+  | {
+      kind: 'table'
+      caption: string | null
+      labels: VisualRefNode[]
+      table: TableData
+      from: number
+      to: number
+    }
   | { kind: 'readonly'; raw: string; from: number; to: number; line: number }
 
 function pushText(target: InlineNode[], text: string): void {
@@ -307,6 +327,139 @@ function parseListItems(node: any): InlineNode[][] | null {
   return models as InlineNode[][]
 }
 
+function trimWhitespaceNodes(nodes: any[]): any[] {
+  let first = 0
+  let last = nodes.length - 1
+  while (first <= last && nodes[first]?.type === 'whitespace') first += 1
+  while (last >= first && nodes[last]?.type === 'whitespace') last -= 1
+  return nodes.slice(first, last + 1)
+}
+
+function findTabularNode(nodes: any[]): any | null {
+  for (const node of nodes) {
+    if (
+      node?.type === 'environment' &&
+      (node.env === 'tabular' || node.env === 'tabularx' || node.env === 'longtable')
+    ) {
+      return node
+    }
+    if (Array.isArray(node?.content)) {
+      const found = findTabularNode(node.content)
+      if (found) return found
+    }
+    if (Array.isArray(node?.args)) {
+      for (const arg of node.args) {
+        if (Array.isArray(arg.content)) {
+          const found = findTabularNode(arg.content)
+          if (found) return found
+        }
+      }
+    }
+  }
+  return null
+}
+
+function parseTabular(node: any, source: string): TableData | null {
+  const envFrom = node?.position?.start?.offset
+  const envTo = node?.position?.end?.offset
+  const contentNodes = Array.isArray(node?.content) ? node.content : []
+  if (
+    typeof envFrom !== 'number' ||
+    typeof envTo !== 'number' ||
+    contentNodes.length === 0
+  ) {
+    return null
+  }
+  const rows: InlineNode[][][] = []
+  let row: InlineNode[][] = []
+  let cells: any[] = []
+
+  const finishCell = (): boolean => {
+    const model = buildInline(trimWhitespaceNodes(cells))
+    if (!model) return false
+    row.push(model)
+    cells = []
+    return true
+  }
+  const finishRow = (): boolean => {
+    if (!finishCell()) return false
+    rows.push(row)
+    row = []
+    return true
+  }
+
+  for (const child of contentNodes) {
+    if (child?.type === 'string' && child.content === '&') {
+      if (!finishCell()) return null
+      continue
+    }
+    if (child?.type === 'macro' && child.content === '\\') {
+      if (!finishRow()) return null
+      continue
+    }
+    if (
+      child?.type === 'macro' &&
+      ['hline', 'cline', 'toprule', 'midrule', 'bottomrule'].includes(child.content)
+    ) {
+      return null
+    }
+    cells.push(child)
+  }
+  if (!finishRow()) return null
+  // A trailing row break creates an empty final row.
+  if (
+    rows.length > 0 &&
+    rows[rows.length - 1].length === 1 &&
+    rows[rows.length - 1][0].length === 0
+  ) {
+    rows.pop()
+  }
+  if (rows.length === 0) return null
+
+  const first = contentNodes[0]?.position?.start?.offset
+  const last = contentNodes[contentNodes.length - 1]?.position?.end?.offset
+  if (typeof first !== 'number' || typeof last !== 'number') return null
+  const args = Array.isArray(node.args) ? node.args : []
+  const specArg = args[args.length - 1]
+  const spec = Array.isArray(specArg?.content) ? nodeText(specArg.content).trim() : ''
+  return {
+    rows,
+    prefix: source.slice(envFrom, first),
+    suffix: source.slice(last, envTo),
+    spec,
+    envFrom,
+    envTo,
+    expected: source.slice(envFrom, envTo),
+  }
+}
+
+function tableFloatBlock(
+  node: any,
+  source: string,
+  refNodes: VisualRefNode[],
+): Block | null {
+  const from = node?.position?.start?.offset
+  const to = node?.position?.end?.offset
+  if (typeof from !== 'number' || typeof to !== 'number') return null
+  const tabular = findTabularNode(Array.isArray(node.content) ? node.content : [])
+  if (!tabular) return null
+  const table = parseTabular(tabular, source)
+  if (!table) return null
+  const captionNode = (node.content ?? []).find(
+    (child: any) => child?.type === 'macro' && child.content === 'caption',
+  )
+  let caption: string | null = null
+  if (captionNode) {
+    const args = Array.isArray(captionNode.args) ? captionNode.args : []
+    const content = args[args.length - 1]?.content
+    if (Array.isArray(content)) caption = nodeText(content).trim() || null
+  }
+  const labels = refNodes.filter(
+    (ref) => ref.kind === 'label' && ref.from >= from && ref.to <= to,
+  )
+  return { kind: 'table', caption, labels, table, from, to }
+}
+
 function isInlineNode(node: any): boolean {
   if (!node) return false
   if (
@@ -441,6 +594,57 @@ function buildBlocks(content: string): {
       } else {
         const from = node.position?.start?.offset ?? 0
         const to = blockEnd(node)
+        blocks.push({
+          kind: 'readonly',
+          raw: content.slice(from, to),
+          from,
+          to,
+          line: lineAt(content, from),
+        })
+      }
+      continue
+    }
+
+    if (
+      node.type === 'environment' &&
+      (node.env === 'table' || node.env === 'table*')
+    ) {
+      flush()
+      const block = tableFloatBlock(node, content, refNodes)
+      if (block) {
+        blocks.push(block)
+      } else {
+        const from = node.position?.start?.offset ?? 0
+        const to = Math.max(node.position?.end?.offset ?? from, blockEnd(node))
+        blocks.push({
+          kind: 'readonly',
+          raw: content.slice(from, to),
+          from,
+          to,
+          line: lineAt(content, from),
+        })
+      }
+      continue
+    }
+
+    if (
+      node.type === 'environment' &&
+      (node.env === 'tabular' || node.env === 'tabularx' || node.env === 'longtable')
+    ) {
+      flush()
+      const table = parseTabular(node, content)
+      const from = node.position?.start?.offset ?? 0
+      const to = node.position?.end?.offset ?? from
+      if (table) {
+        blocks.push({
+          kind: 'table',
+          caption: null,
+          labels: [],
+          table,
+          from,
+          to,
+        })
+      } else {
         blocks.push({
           kind: 'readonly',
           raw: content.slice(from, to),
@@ -640,11 +844,105 @@ function EditableList({
   )
 }
 
+function EditableTable({
+  caption,
+  labels,
+  table,
+  onEdit,
+  onEditRef,
+}: {
+  caption: string | null
+  labels: VisualRefNode[]
+  table: TableData
+  onEdit: (from: number, to: number, text: string, expected?: string) => void
+  onEditRef: (ref: VisualRefNode) => void
+}) {
+  const initial = useMemo(
+    () => table.rows.map((row) => row.map((cell) => modelToLatex(cell))),
+    [table],
+  )
+  const aligns = useMemo(
+    () =>
+      table.spec
+        .replace(/\|/g, '')
+        .replace(/@\{[^}]*\}/g, '')
+        .replace(/[pmb]\{[^}]*\}/g, 'l')
+        .split('')
+        .filter((char) => 'lcrX'.includes(char))
+        .map((char) =>
+          char === 'c' ? 'center' : char === 'r' ? 'right' : 'left',
+        ),
+    [table.spec],
+  )
+
+  function blurCell(rowIndex: number, cellIndex: number, event: FocusEvent<HTMLElement>) {
+    const next = serializeChildren(event.currentTarget)
+      .replace(/ /g, ' ')
+      .replace(/[ \t]+$/, '')
+    if (next === initial[rowIndex][cellIndex]) return
+    const updated = initial.map((row) => [...row])
+    updated[rowIndex][cellIndex] = next
+    const body = updated
+      .map((row) => `${row.join(' & ')} \\\\`)
+      .join('\n')
+    onEdit(table.envFrom, table.envTo, `${table.prefix}\n${body}\n${table.suffix}`, table.expected)
+  }
+
+  function keyDown(event: KeyboardEvent<HTMLElement>) {
+    if (event.key === 'Enter') event.preventDefault()
+  }
+
+  return (
+    <div className="my-3">
+      {caption && <div className="table-caption">{caption}</div>}
+      {labels.length > 0 && (
+        <div className="mb-1 flex flex-wrap gap-1">
+          {labels.map((label) => (
+            <button
+              key={`${label.from}-${label.to}`}
+              type="button"
+              onClick={() => onEditRef(label)}
+              className="macro-label ref-chip"
+            >
+              {label.value}
+            </button>
+          ))}
+        </div>
+      )}
+      <table className="editable-tabular">
+        <tbody>
+          {table.rows.map((row, rowIndex) => (
+            <tr key={rowIndex}>
+              {row.map((cell, cellIndex) => (
+                <td
+                  key={cellIndex}
+                  contentEditable
+                  suppressContentEditableWarning
+                  onBlur={(event) => blurCell(rowIndex, cellIndex, event)}
+                  onKeyDown={keyDown}
+                  onPaste={plainPaste}
+                  spellCheck
+                  title="Editable table cell"
+                  className="visual-editable whitespace-pre-wrap"
+                  style={{ textAlign: aligns[cellIndex] ?? 'left' }}
+                >
+                  {renderInline(cell, `cell-${rowIndex}-${cellIndex}-`)}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 function ReadonlyBlock({
   raw,
   line,
   mathNodes,
   refNodes,
+  bibEntries = [],
   resolveAsset,
   onEditSource,
   onEditMath,
@@ -654,6 +952,7 @@ function ReadonlyBlock({
   line: number
   mathNodes: VisualMathNode[]
   refNodes: VisualRefNode[]
+  bibEntries?: BibEntry[]
   resolveAsset?: (path: string) => Promise<string | null>
   onEditSource: (line: number) => void
   onEditMath: (math: VisualMathNode) => void
@@ -666,6 +965,8 @@ function ReadonlyBlock({
   editRefRef.current = onEditRef
   const resolveAssetRef = useRef(resolveAsset)
   resolveAssetRef.current = resolveAsset
+  const bibEntriesRef = useRef(bibEntries)
+  bibEntriesRef.current = bibEntries
   const { html, error } = useMemo(() => latexToHtml(raw), [raw])
 
   useEffect(() => {
@@ -689,9 +990,21 @@ function ReadonlyBlock({
     )
     if (refElements.length === refNodes.length) {
       refElements.forEach((element, index) => {
+        const ref = refNodes[index]
         element.dataset.refIndex = String(index)
         element.classList.add('ref-chip')
-        element.title = 'Click to edit this key'
+        let title = 'Click to edit this key'
+        if (ref?.kind === 'cite') {
+          const keys = ref.value
+            .split(',')
+            .map((key) => key.trim())
+            .filter(Boolean)
+          const entry = keys
+            .map((key) => bibEntriesRef.current.find((item) => item.key === key))
+            .find(Boolean)
+          if (entry) title = formatBibEntry(entry)
+        }
+        element.title = title
       })
     }
     const onClick = (event: MouseEvent) => {
@@ -720,7 +1033,7 @@ function ReadonlyBlock({
     }
     host.addEventListener('click', onClick)
     return () => host.removeEventListener('click', onClick)
-  }, [html, mathNodes, refNodes])
+  }, [html, mathNodes, refNodes, bibEntries])
 
   useEffect(() => {
     const host = hostRef.current
@@ -799,6 +1112,10 @@ function applyCode(): void {
 export default function VisualEditor({
   content,
   fileName,
+  bibEntries = [],
+  awareness = null,
+  fileId = null,
+  userLabel = '',
   resolveAsset,
   onEditBlock,
   onEditSource,
@@ -807,6 +1124,10 @@ export default function VisualEditor({
 }: {
   content: string
   fileName: string
+  bibEntries?: BibEntry[]
+  awareness?: Awareness | null
+  fileId?: string | null
+  userLabel?: string
   resolveAsset?: (path: string) => Promise<string | null>
   onEditBlock: (from: number, to: number, text: string, expected?: string) => void
   onEditSource: (line: number) => void
@@ -817,6 +1138,92 @@ export default function VisualEditor({
     () => buildBlocks(content),
     [content],
   )
+
+  const [remoteLocks, setRemoteLocks] = useState<
+    Array<{ from: number; to: number; name: string }>
+  >([])
+
+  useEffect(() => {
+    if (!awareness) {
+      setRemoteLocks([])
+      return
+    }
+    const update = () => {
+      const locks: Array<{ from: number; to: number; name: string }> = []
+      awareness.getStates().forEach((state: any, clientId: number) => {
+        if (clientId === awareness.clientID) return
+        const block = state?.editingBlock
+        if (
+          block &&
+          block.fileId === fileId &&
+          typeof block.from === 'number' &&
+          typeof block.to === 'number'
+        ) {
+          locks.push({
+            from: block.from,
+            to: block.to,
+            name: block.name || 'another user',
+          })
+        }
+      })
+      setRemoteLocks(locks)
+    }
+    awareness.on('change', update)
+    update()
+    return () => {
+      awareness.off('change', update)
+      awareness.setLocalStateField('editingBlock', null)
+    }
+  }, [awareness, fileId])
+
+  function beginEdit(from: number, to: number) {
+    awareness?.setLocalStateField('editingBlock', {
+      fileId,
+      from,
+      to,
+      name: userLabel || 'another user',
+    })
+  }
+
+  function endEdit() {
+    awareness?.setLocalStateField('editingBlock', null)
+  }
+
+  function lockFor(from: number, to: number): string | null {
+    return (
+      remoteLocks.find((lock) => lock.from < to && lock.to > from)?.name ?? null
+    )
+  }
+
+  function editableWrapper(
+    content: ReactNode,
+    key: string,
+    from: number,
+    to: number,
+  ) {
+    const lockedBy = lockFor(from, to)
+    return (
+      <div
+        key={key}
+        className="relative"
+        onFocusCapture={() => beginEdit(from, to)}
+        onBlurCapture={endEdit}
+      >
+        {content}
+        {lockedBy && (
+          <>
+            <div
+              className="absolute inset-0 z-10 cursor-not-allowed rounded bg-white/40"
+              title={`Locked by ${lockedBy}`}
+            />
+            <span className="absolute right-2 top-0 z-20 rounded-full bg-[var(--warn-soft)] px-2 py-0.5 text-[10px] text-[var(--warn)]">
+              Locked by {lockedBy}
+            </span>
+          </>
+        )}
+      </div>
+    )
+  }
 
   if (error) {
     return (
@@ -887,41 +1294,61 @@ export default function VisualEditor({
           {blocks.map((block, index) => {
             const key = `${block.kind}-${block.from}-${block.to}-${index}`
             if (block.kind === 'heading') {
-              return (
+              return editableWrapper(
                 <EditableHeading
-                  key={key}
                   level={block.level}
                   text={block.text}
                   from={block.from}
                   to={block.to}
                   expected={content.slice(block.from, block.to)}
                   onEdit={onEditBlock}
-                />
+                />,
+                key,
+                block.from,
+                block.to,
               )
             }
             if (block.kind === 'formatted') {
-              return (
+              return editableWrapper(
                 <EditableFormattedParagraph
-                  key={key}
                   model={block.model}
                   from={block.from}
                   to={block.to}
                   expected={content.slice(block.from, block.to)}
                   onEdit={onEditBlock}
-                />
+                />,
+                key,
+                block.from,
+                block.to,
               )
             }
             if (block.kind === 'list') {
-              return (
+              return editableWrapper(
                 <EditableList
-                  key={key}
                   ordered={block.ordered}
                   items={block.items}
                   from={block.from}
                   to={block.to}
                   expected={content.slice(block.from, block.to)}
                   onEdit={onEditBlock}
-                />
+                />,
+                key,
+                block.from,
+                block.to,
+              )
+            }
+            if (block.kind === 'table') {
+              return editableWrapper(
+                <EditableTable
+                  caption={block.caption}
+                  labels={block.labels}
+                  table={block.table}
+                  onEdit={onEditBlock}
+                  onEditRef={onEditRef}
+                />,
+                key,
+                block.from,
+                block.to,
               )
             }
             return (
@@ -935,6 +1362,7 @@ export default function VisualEditor({
                   refNodes={refNodes.filter(
                     (ref) => ref.from >= block.from && ref.to <= block.to,
                   )}
+                  bibEntries={bibEntries}
                   resolveAsset={resolveAsset}
                   onEditSource={onEditSource}
                   onEditMath={onEditMath}

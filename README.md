@@ -11,7 +11,7 @@ assistant.
 - CodeMirror 6 editor for `.tex`, `.bib`, `.sty`, `.cls` and other text files
 - PDF preview with forward/inverse SyncTeX
 - Equation builder popup with a visual toolbar and live preview (CodeCogs)
-- Visual editor with inline formatting (B/I/U), editable lists, click-to-edit equations, citation/reference key editing, resolved figures, table rendering, and a PDF/SyncTeX view (Phase 3.3)
+- Visual editor with inline formatting (B/I/U), editable lists and tables, click-to-edit equations, a `.bib` citation picker, resolved figures, and collaborative edit locks (Phase 3.4)
 - Compilation with a configurable engine:
   - `pdflatex`, `xelatex`, `lualatex` via TeX Live + `latexmk`
   - Tectonic as a fallback
@@ -80,14 +80,14 @@ docker-compose.yml Local deployment
   supports bold/italic/underline/monospace via the B/I/U toolbar, edits simple
   `itemize`/`enumerate` lists, and lets you click an inline/display equation to
   edit it with the equation builder. Citation/reference/label keys are rendered
-  as clickable chips that edit their source keys, `\includegraphics` figures are
-  loaded from project files, and simple `tabular` tables are rendered
-  read-only (Phase 3.3). Math delimiters and environments are preserved, edits
-  are source-mapped, and LaTeX-special characters are escaped automatically.
-  Visual edits carry an expected source range, so an edit that races a remote
-  change is rejected with a notice instead of overwriting it. Nested or labeled
-  lists, editable table cells, citations resolved against `.bib` entries and
-  unresolved macros remain source-only. Only the active file is shown;
-  `\input`/`\include` are not expanded. See
+  as clickable chips; `.bib` files are parsed and citations use a searchable
+  picker with entry titles. `\includegraphics` figures load from project files.
+  Simple `tabular`/`tabularx`/`longtable` cells are editable (including tables
+  inside `table` floats) while captions, labels and column specs are preserved.
+  Visual edits carry an expected source range and focused blocks publish a
+  collaborative lock, so an edit that races a remote change is rejected with a
+  notice instead of overwriting it (Phase 3.4). Complex tables, nested or
+  labeled lists, mixed math paragraphs and unresolved macros remain source-only.
+  Only the active file is shown; `\input`/`\include` are not expanded. See
   [`docs/visual-editor-plan.md`](docs/visual-editor-plan.md) for the
   architecture, safety constraints and remaining phases.
