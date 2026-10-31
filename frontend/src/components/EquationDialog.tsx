@@ -7,6 +7,8 @@ export type EquationMode = 'inline' | 'display' | 'raw'
 type Props = {
   initialLatex: string
   initialMode?: EquationMode
+  /** Editing existing math: hide the delimiter selector and preserve its form. */
+  modeLocked?: boolean
   onClose: () => void
   onInsert: (latex: string, mode: EquationMode) => void
 }
@@ -18,6 +20,7 @@ type Props = {
 export default function EquationDialog({
   initialLatex,
   initialMode = 'inline',
+  modeLocked = false,
   onClose,
   onInsert,
 }: Props) {
@@ -28,6 +31,8 @@ export default function EquationDialog({
     output: `cc-output-${suffix}`,
   }
   const linkedRef = useRef<any>(null)
+  const toolbarRef = useRef<any>(null)
+  const closeTimerRef = useRef<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [mode, setMode] = useState<EquationMode>(initialMode)
@@ -41,8 +46,14 @@ export default function EquationDialog({
         const Eq = window.EqEditor
         if (!Eq) throw new Error('Equation editor did not initialise')
         const linked = Eq.TextArea.link(ids.latex).addOutput(new Eq.Output(ids.output))
-        Eq.Toolbar.link(ids.toolbar).addTextArea(linked)
+        const toolbar = Eq.Toolbar.link(ids.toolbar).addTextArea(linked)
         linkedRef.current = linked
+        toolbarRef.current = toolbar
+        // If the dialog opens under the mouse, a toolbar panel can open on
+        // hover and cover the footer. Close panels once after mount.
+        closeTimerRef.current = window.setTimeout(() => {
+          toolbarRef.current?.closePanels?.()
+        }, 250)
 
         const input = document.getElementById(ids.latex)
         if (initialLatex && input) {
@@ -72,6 +83,7 @@ export default function EquationDialog({
     })()
     return () => {
       cancelled = true
+      if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current)
     }
     // The dialog is mounted fresh for every open, so the ids are stable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -161,24 +173,33 @@ export default function EquationDialog({
             </p>
           )}
 
-          <div className="flex flex-wrap items-center gap-2">
-            <label className="text-[11px] font-medium text-[var(--ink-2)]" htmlFor={`${ids.latex}-mode`}>
-              Insert as
-            </label>
-            <select
-              id={`${ids.latex}-mode`}
-              value={mode}
-              onChange={(event) => setMode(event.target.value as EquationMode)}
-              className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-2.5 py-1.5 text-xs outline-none focus:border-[var(--accent)]"
-            >
-              <option value="inline">Inline math — $...$</option>
-              <option value="display">Display math — \[...\]</option>
-              <option value="raw">Raw LaTeX</option>
-            </select>
-          </div>
+          {modeLocked ? (
+            <p className="text-[11px] text-[var(--muted)]">
+              Editing an existing equation — its delimiters or environment are preserved.
+            </p>
+          ) : (
+            <div className="flex flex-wrap items-center gap-2">
+              <label
+                className="text-[11px] font-medium text-[var(--ink-2)]"
+                htmlFor={`${ids.latex}-mode`}
+              >
+                Insert as
+              </label>
+              <select
+                id={`${ids.latex}-mode`}
+                value={mode}
+                onChange={(event) => setMode(event.target.value as EquationMode)}
+                className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-2.5 py-1.5 text-xs outline-none focus:border-[var(--accent)]"
+              >
+                <option value="inline">Inline math — $...$</option>
+                <option value="display">Display math — \[...\]</option>
+                <option value="raw">Raw LaTeX</option>
+              </select>
+            </div>
+          )}
         </div>
 
-        <div className="flex items-center justify-end gap-2 border-t border-[var(--border)] px-4 py-3">
+        <div className="relative z-20 flex items-center justify-end gap-2 border-t border-[var(--border)] bg-[var(--panel)] px-4 py-3">
           <button
             type="button"
             onClick={onClose}
@@ -191,7 +212,8 @@ export default function EquationDialog({
             onClick={insert}
             className="inline-flex items-center gap-1.5 rounded-full bg-[var(--accent)] px-4 py-1.5 text-xs font-medium text-[var(--accent-ink)] hover:bg-[var(--accent-2)]"
           >
-            <Icon name="add" size={15} /> Insert equation
+            <Icon name={modeLocked ? 'task_alt' : 'add'} size={15} />
+            {modeLocked ? 'Update equation' : 'Insert equation'}
           </button>
         </div>
       </div>

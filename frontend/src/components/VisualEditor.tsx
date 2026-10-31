@@ -42,6 +42,72 @@ type Block =
   | { kind: 'paragraph'; text: string; from: number; to: number }
   | { kind: 'readonly'; raw: string; from: number; to: number; line: number }
 
+export type VisualMathNode = {
+  from: number
+  to: number
+  inner: string
+  open: string
+  close: string
+  display: boolean
+}
+
+function parseMathRaw(
+  raw: string,
+  displayHint: boolean,
+): Omit<VisualMathNode, 'from' | 'to'> | null {
+  if (!raw.trim()) return null
+  if (raw.startsWith('$$') && raw.endsWith('$$') && raw.length >= 4) {
+    return { inner: raw.slice(2, -2).trim(), open: '$$', close: '$$', display: true }
+  }
+  if (raw.startsWith('\\[') && raw.endsWith('\\]') && raw.length >= 4) {
+    return { inner: raw.slice(2, -2).trim(), open: '\\[', close: '\\]', display: true }
+  }
+  if (raw.startsWith('\\(') && raw.endsWith('\\)') && raw.length >= 4) {
+    return { inner: raw.slice(2, -2).trim(), open: '\\(', close: '\\)', display: false }
+  }
+  if (raw.startsWith('$') && raw.endsWith('$') && raw.length >= 2) {
+    return { inner: raw.slice(1, -1).trim(), open: '$', close: '$', display: false }
+  }
+  const environment = raw.match(/^\\begin\{([^}]+)\}/)
+  if (environment) {
+    const close = `\\end{${environment[1]}}`
+    if (raw.endsWith(close)) {
+      const open = environment[0]
+      return {
+        inner: raw.slice(open.length, raw.length - close.length).trim(),
+        open,
+        close,
+        display: true,
+      }
+    }
+  }
+  return { inner: raw.trim(), open: '', close: '', display: displayHint }
+}
+
+function collectMath(nodes: any[], source: string, out: VisualMathNode[]): void {
+  for (const node of nodes) {
+    if (
+      node.type === 'inlinemath' ||
+      node.type === 'displaymath' ||
+      node.type === 'mathenv'
+    ) {
+      const from = node.position?.start?.offset
+      const to = node.position?.end?.offset
+      if (typeof from === 'number' && typeof to === 'number' && to > from) {
+        const info = parseMathRaw(source.slice(from, to), node.type !== 'inlinemath')
+        if (info) out.push({ from, to, ...info })
+      }
+      continue
+    }
+    if (Array.isArray(node.content)) collectMath(node.content, source, out)
+    if (Array.isArray(node.args)) {
+      for (const arg of node.args) {
+        if (Array.isArray(arg.content)) collectMath(arg.content, source, out)
+      }
+    }
+  }
+}
+
 function isPlainNode(node: any): boolean {
   return node?.type === 'string' || node?.type === 'whitespace' || isEscapedTextNode(node)
 }
@@ -86,13 +152,18 @@ function lineAt(content: string, offset: number): number {
   return content.slice(0, Math.max(0, offset)).split('\n').length
 }
 
-function buildBlocks(content: string): { blocks: Block[]; error: string } {
+function buildBlocks(content: string): {
+  blocks: Block[]
+  mathNodes: VisualMathNode[]
+  error: string
+} {
   let tree: any
   try {
     tree = (unified() as any).use(unifiedLatexFromString).parse(content)
   } catch (err) {
     return {
       blocks: [],
+      mathNodes: [],
       error: err instanceof Error ? err.message : 'Could not parse this LaTeX file',
     }
   }
@@ -101,6 +172,8 @@ function buildBlocks(content: string): { blocks: Block[]; error: string } {
   )
   const body: any[] = document?.content ?? tree.content
   const blocks: Block[] = []
+  const mathNodes: VisualMathNode[] = []
+  collectMath(body, content, mathNodes)
   let buffer: any[] = []
 
   const blockEnd = (node: any): number => {
@@ -196,7 +269,7 @@ function buildBlocks(content: string): { blocks: Block[]; error: string } {
     })
   }
   flush()
-  return { blocks, error: '' }
+  return { blocks, mathNodes, error: '' }
 }
 
 function plainPaste(event: ClipboardEvent<HTMLElement>) {
@@ -276,17 +349,50 @@ function EditableParagraph({
 function ReadonlyBlock({
   raw,
   line,
+  mathNodes,
   onEditSource,
+  onEditMath,
 }: {
   raw: string
   line: number
+  mathNodes: VisualMathNode[]
   onEditSource: (line: number) => void
+  onEditMath: (math: VisualMathNode) => void
 }) {
   const hostRef = useRef<HTMLDivElement>(null)
+  const editMathRef = useRef(onEditMath)
+  editMathRef.current = onEditMath
   const { html, error } = useMemo(() => latexToHtml(raw), [raw])
   useEffect(() => {
-    if (hostRef.current) renderMathIn(hostRef.current)
-  }, [html])
+    const host = hostRef.current
+    if (!host) return
+    renderMathIn(host)
+    const elements = Array.from(
+      host.querySelectorAll<HTMLElement>('.inline-math, .display-math'),
+    )
+    // Only map when the rendered order matches the AST order; otherwise a
+    // click could target the wrong equation.
+    if (elements.length !== mathNodes.length) return
+    elements.forEach((element, index) => {
+      element.dataset.mathIndex = String(index)
+      element.classList.add('math-clickable')
+      element.title = 'Click to edit equation'
+    })
+    const onClick = (event: MouseEvent) => {
+      const target = (event.target as HTMLElement | null)?.closest(
+        '[data-math-index]',
+      ) as HTMLElement | null
+      if (!target) return
+      const index = Number(target.dataset.mathIndex)
+      const math = mathNodes[index]
+      if (!math) return
+      event.preventDefault()
+      event.stopPropagation()
+      editMathRef.current(math)
+    }
+    host.addEventListener('click', onClick)
+    return () => host.removeEventListener('click', onClick)
+  }, [html, mathNodes])
   return (
     <div className="visual-readonly group/block relative">
       {error ? (
@@ -316,13 +422,15 @@ export default function VisualEditor({
   fileName,
   onEditBlock,
   onEditSource,
+  onEditMath,
 }: {
   content: string
   fileName: string
   onEditBlock: (from: number, to: number, text: string) => void
   onEditSource: (line: number) => void
+  onEditMath: (math: VisualMathNode) => void
 }) {
-  const { blocks, error } = useMemo(() => buildBlocks(content), [content])
+  const { blocks, mathNodes, error } = useMemo(() => buildBlocks(content), [content])
 
   if (error) {
     return (
@@ -378,7 +486,11 @@ export default function VisualEditor({
                 <ReadonlyBlock
                   raw={block.raw}
                   line={block.line}
+                  mathNodes={mathNodes.filter(
+                    (math) => math.from >= block.from && math.to <= block.to,
+                  )}
                   onEditSource={onEditSource}
+                  onEditMath={onEditMath}
                 />
               </div>
             )

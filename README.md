@@ -11,7 +11,7 @@ assistant.
 - CodeMirror 6 editor for `.tex`, `.bib`, `.sty`, `.cls` and other text files
 - PDF preview with forward/inverse SyncTeX
 - Equation builder popup with a visual toolbar and live preview (CodeCogs)
-- Visual editor with inline editing for plain paragraphs and headings, plus a rendered PDF/SyncTeX view (Phase 3.2a)
+- Visual editor with inline editing for plain text, click-to-edit equations, and a PDF/SyncTeX view (Phase 3.2b)
 - Compilation with a configurable engine:
   - `pdflatex`, `xelatex`, `lualatex` via TeX Live + `latexmk`
   - Tectonic as a fallback
@@ -76,10 +76,12 @@ docker-compose.yml Local deployment
 - The equation builder uses the free CodeCogs equation-editor API. CodeCogs
   displays a retirement notice for this API; moving to fxEditor requires a
   domain-bound licence. The editor is an equation tool only.
-- The Visual mode Document tab edits plain paragraphs and headings inline
-  (Phase 3.2a). Edits are source-mapped and LaTeX-special characters are
-  escaped automatically. Blocks containing math, lists, macros or other complex
-  constructs are rendered read-only with an "Edit in source" action. Only the
+- The Visual mode Document tab edits plain paragraphs and headings inline and
+  lets you click an inline/display equation to edit it with the equation
+  builder (Phase 3.2b). Math delimiters and environments are preserved, edits
+  are source-mapped, and LaTeX-special characters are escaped automatically.
+  Blocks containing other complex constructs (lists, formatting, unknown
+  macros) are rendered read-only with an "Edit in source" action. Only the
   active file is shown; `\input`/`\include` are not expanded. See
   [`docs/visual-editor-plan.md`](docs/visual-editor-plan.md) for the
   architecture, safety constraints and remaining phases.

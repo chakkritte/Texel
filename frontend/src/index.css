@@ -275,6 +275,19 @@ body {
 .latex-visual .visual-readonly:hover {
   box-shadow: 0 0 0 1px #e5e7eb;
 }
+.latex-visual .math-clickable {
+  border-radius: 3px;
+  cursor: pointer;
+  transition: box-shadow 120ms ease;
+}
+.latex-visual .inline-math.math-clickable {
+  display: inline-block;
+  padding: 0.06em 0.14em;
+  margin: -0.06em -0.14em;
+}
+.latex-visual .math-clickable:hover {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
+}
 
 .font-display {
   font-family: var(--font-display);

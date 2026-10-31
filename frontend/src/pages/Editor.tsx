@@ -22,6 +22,8 @@ import type { SelectionAction } from '../components/SelectionToolbar'
 import IconRail, { type PanelTab } from '../components/shell/IconRail'
 import StatusBar from '../components/shell/StatusBar'
 
+import type { VisualMathNode } from '../components/VisualEditor'
+
 const VisualEditor = lazy(() => import('../components/VisualEditor'))
 
 type EditorSelectionRange = { from: number; to: number; text: string }
@@ -135,6 +137,7 @@ export default function Editor() {
   const [equationNonce, setEquationNonce] = useState(0)
   const [equationInitial, setEquationInitial] = useState('')
   const [equationMode, setEquationMode] = useState<EquationMode>('inline')
+  const [equationEdit, setEquationEdit] = useState<VisualMathNode | null>(null)
   const [visualMode, setVisualMode] = useState(false)
   const [visualTab, setVisualTab] = useState<'document' | 'pdf'>('document')
   const [openTabs, setOpenTabs] = useState<FileT[]>([])
@@ -221,6 +224,7 @@ export default function Editor() {
     setAiRequest(null)
     setEditorSelection(null)
     setEquationOpen(false)
+    setEquationEdit(null)
     setReplaceRequest(null)
   }, [active?.id])
 
@@ -233,8 +237,17 @@ export default function Editor() {
 
   function openEquationEditor() {
     const selected = editorSelection?.text ?? ''
+    setEquationEdit(null)
     setEquationInitial(stripMathDelimiters(selected))
     setEquationMode(detectEquationMode(selected))
+    setEquationNonce((value) => value + 1)
+    setEquationOpen(true)
+  }
+
+  function editVisualMath(math: VisualMathNode) {
+    setEquationEdit(math)
+    setEquationInitial(math.inner)
+    setEquationMode(math.display ? 'display' : 'inline')
     setEquationNonce((value) => value + 1)
     setEquationOpen(true)
   }
@@ -249,6 +262,22 @@ export default function Editor() {
   }
 
   function insertEquation(latex: string, mode: EquationMode) {
+    if (equationEdit) {
+      const open = equationEdit.open || (equationEdit.display ? '\\[' : '$')
+      const close = equationEdit.close || (equationEdit.display ? '\\]' : '$')
+      const text = open.startsWith('\\begin{')
+        ? `${open}\n${latex}\n${close}`
+        : `${open}${latex}${close}`
+      setReplaceRequest({
+        from: equationEdit.from,
+        to: equationEdit.to,
+        text,
+        nonce: Date.now(),
+      })
+      setEquationEdit(null)
+      setEquationOpen(false)
+      return
+    }
     const text =
       mode === 'inline'
         ? `$${latex}$`
@@ -1392,6 +1421,7 @@ export default function Editor() {
                         fileName={active.name}
                         onEditBlock={editVisualBlock}
                         onEditSource={editSourceAt}
+                        onEditMath={editVisualMath}
                       />
                     </Suspense>
                   ) : (
@@ -1467,7 +1497,11 @@ export default function Editor() {
           key={equationNonce}
           initialLatex={equationInitial}
           initialMode={equationMode}
-          onClose={() => setEquationOpen(false)}
+          modeLocked={Boolean(equationEdit)}
+          onClose={() => {
+            setEquationOpen(false)
+            setEquationEdit(null)
+          }}
           onInsert={insertEquation}
         />
       )}
