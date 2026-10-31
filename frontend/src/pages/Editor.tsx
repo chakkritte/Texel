@@ -12,6 +12,7 @@ import CodeMirrorEditor, { type JumpTarget } from '../components/CodeMirrorEdito
 import FileTree, { type FileT, type FolderT, type TreeT } from '../components/FileTree'
 import UploadDialog, { type UploadFolder } from '../components/UploadDialog'
 import ProjectNameDialog from '../components/ProjectNameDialog'
+import EquationDialog, { type EquationMode } from '../components/EquationDialog'
 import PdfViewer, { type PdfHighlight } from '../components/pdf/PdfViewer'
 import HistoryPanel from '../components/history/HistoryPanel'
 import CommentsPanel from '../components/history/CommentsPanel'
@@ -20,6 +21,45 @@ import { AiPanel, type AiRequest, type Selection } from '../components/ai'
 import type { SelectionAction } from '../components/SelectionToolbar'
 import IconRail, { type PanelTab } from '../components/shell/IconRail'
 import StatusBar from '../components/shell/StatusBar'
+
+type EditorSelectionRange = { from: number; to: number; text: string }
+
+function stripMathDelimiters(text: string): string {
+  const trimmed = text.trim()
+  if (!trimmed) return ''
+  const pairs: [string, string][] = [
+    ['$$', '$$'],
+    ['\\[', '\\]'],
+    ['\\(', '\\)'],
+    ['$', '$'],
+  ]
+  for (const [open, close] of pairs) {
+    if (
+      trimmed.startsWith(open) &&
+      trimmed.endsWith(close) &&
+      trimmed.length > open.length + close.length
+    ) {
+      return trimmed.slice(open.length, trimmed.length - close.length).trim()
+    }
+  }
+  const environment = trimmed.match(
+    /^\\begin\{(equation\*?|align\*?|gather\*?|multline\*?)\}([\s\S]*)\\end\{\1\}$/,
+  )
+  if (environment) return environment[2].trim()
+  return trimmed
+}
+
+function detectEquationMode(text: string): EquationMode {
+  const trimmed = text.trim()
+  if (
+    trimmed.startsWith('$$') ||
+    trimmed.startsWith('\\[') ||
+    /^\\begin\{(equation|align|gather|multline)/.test(trimmed)
+  ) {
+    return 'display'
+  }
+  return 'inline'
+}
 
 const SELECTION_PROMPTS: Record<SelectionAction, string> = {
   explain:
@@ -79,6 +119,15 @@ export default function Editor() {
   const [uploadOpen, setUploadOpen] = useState(false)
   const [uploadProgress, setUploadProgress] = useState('')
   const [renameFileTarget, setRenameFileTarget] = useState<FileT | null>(null)
+  const [editorSelection, setEditorSelection] = useState<EditorSelectionRange | null>(null)
+  const [insertRequest, setInsertRequest] = useState<{ text: string; nonce: number } | null>(
+    null,
+  )
+  const [equationOpen, setEquationOpen] = useState(false)
+  const [equationNonce, setEquationNonce] = useState(0)
+  const [equationInitial, setEquationInitial] = useState('')
+  const [equationMode, setEquationMode] = useState<EquationMode>('inline')
+  const [visualMode, setVisualMode] = useState(false)
   const [openTabs, setOpenTabs] = useState<FileT[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   const active = openTabs.find((file) => file.id === activeId) ?? null
@@ -161,6 +210,8 @@ export default function Editor() {
   useEffect(() => {
     setAiSelection(null)
     setAiRequest(null)
+    setEditorSelection(null)
+    setEquationOpen(false)
   }, [active?.id])
 
   function handleSelectionAction(action: SelectionAction, selection: Selection) {
@@ -168,6 +219,25 @@ export default function Editor() {
     setAiSelection(selection)
     setSidebarTab('ai')
     setAiRequest({ prompt: SELECTION_PROMPTS[action], nonce: Date.now() })
+  }
+
+  function openEquationEditor() {
+    const selected = editorSelection?.text ?? ''
+    setEquationInitial(stripMathDelimiters(selected))
+    setEquationMode(detectEquationMode(selected))
+    setEquationNonce((value) => value + 1)
+    setEquationOpen(true)
+  }
+
+  function insertEquation(latex: string, mode: EquationMode) {
+    const text =
+      mode === 'inline'
+        ? `$${latex}$`
+        : mode === 'display'
+          ? `\\[\n${latex}\n\\]`
+          : latex
+    setInsertRequest({ text, nonce: Date.now() })
+    setEquationOpen(false)
   }
 
   async function openFile(file: FileT) {
@@ -353,6 +423,8 @@ export default function Editor() {
 
   async function inverseSearch(page: number, x: number, y: number) {
     if (!job || job.status !== 'success') return
+    // In visual mode a PDF click jumps back to the source editor.
+    setVisualMode(false)
     try {
       const match = await api<{ file: string; line: number; column?: number }>(
         `/compile/${job.id}/synctex/edit?page=${page}&x=${x}&y=${y}`
@@ -870,6 +942,23 @@ export default function Editor() {
           {initials}
         </div>
 
+        <button
+          onClick={() => setVisualMode((value) => !value)}
+          title={
+            visualMode
+              ? 'Back to the source editor'
+              : 'Visual preview (read-only) — click the PDF to jump to source'
+          }
+          className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-colors ${
+            visualMode
+              ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]'
+              : 'border-[var(--border-strong)] text-[var(--ink-2)] hover:bg-[var(--panel-3)]'
+          }`}
+        >
+          <Icon name={visualMode ? 'edit' : 'visibility'} size={16} />
+          <span className="hidden sm:inline">{visualMode ? 'Source' : 'Visual'}</span>
+        </button>
+
         {id && <ShareDialog projectId={id} />}
 
         <button
@@ -945,10 +1034,14 @@ export default function Editor() {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <IconRail active={sidebarTab} onChange={setSidebarTab} />
+        <div className={visualMode ? 'hidden' : 'contents'}>
+          <IconRail active={sidebarTab} onChange={setSidebarTab} />
+        </div>
 
         <aside
-          className={`flex shrink-0 flex-col border-r border-[var(--border)] bg-[var(--panel-2)] ${
+          className={`${
+            visualMode ? 'hidden' : 'flex'
+          } shrink-0 flex-col border-r border-[var(--border)] bg-[var(--panel-2)] ${
             sidebarTab === 'ai' ? 'w-[350px]' : 'w-[300px]'
           }`}
         >
@@ -1028,7 +1121,11 @@ export default function Editor() {
           </div>
         </aside>
 
-        <main className="flex min-w-0 flex-1 flex-col bg-[var(--panel)]">
+        <main
+          className={`${
+            visualMode ? 'hidden' : 'flex'
+          } min-w-0 flex-1 flex-col bg-[var(--panel)]`}
+        >
           <div className="flex h-10 shrink-0 items-center gap-1 border-b border-[var(--border)] px-2">
             <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
               {openTabs.map((file) => {
@@ -1075,6 +1172,13 @@ export default function Editor() {
             </div>
             {activeIsText && (
               <>
+            <button
+              onClick={openEquationEditor}
+              title="Insert or edit an equation (visual builder)"
+              className="ml-1 flex h-7 shrink-0 items-center gap-1 rounded-full px-2.5 text-[11px] text-[var(--muted)] transition-colors hover:bg-[var(--panel-3)] hover:text-[var(--ink)]"
+            >
+              <Icon name="functions" size={14} /> Equation
+            </button>
             <button
               onClick={toggleTrackChanges}
               title="Track changes"
@@ -1144,6 +1248,9 @@ export default function Editor() {
                   aiActions={Boolean(project?.ai_enabled)}
                   onSelectionChange={setAiSelection}
                   onSelectionAction={handleSelectionAction}
+                  onSelectionRange={setEditorSelection}
+                  insertRequest={insertRequest}
+                  onInsertApplied={() => setInsertRequest(null)}
                   onCursor={(line, column) => setCursor({ line, column })}
                   onChange={(value) => {
                     setContent(value)
@@ -1203,13 +1310,21 @@ export default function Editor() {
 
         <div
           onMouseDown={startResize}
-          className="w-1.5 shrink-0 cursor-col-resize bg-[var(--border)] transition-colors hover:bg-[var(--accent-2)]"
+          className={
+            visualMode
+              ? 'hidden'
+              : 'w-1.5 shrink-0 cursor-col-resize bg-[var(--border)] transition-colors hover:bg-[var(--accent-2)]'
+          }
           title="Drag to resize"
         />
 
         <section
-          style={{ width: `${pdfSize}%` }}
-          className="min-w-[320px] shrink-0 overflow-hidden bg-[var(--panel)]"
+          style={visualMode ? undefined : { width: `${pdfSize}%` }}
+          className={
+            visualMode
+              ? 'min-w-0 flex-1 overflow-hidden bg-[var(--panel)]'
+              : 'min-w-[320px] shrink-0 overflow-hidden bg-[var(--panel)]'
+          }
         >
           <PdfViewer
             url={pdfUrl}
@@ -1260,6 +1375,16 @@ export default function Editor() {
           await renameFile(renameFileTarget, name)
         }}
       />
+
+      {equationOpen && (
+        <EquationDialog
+          key={equationNonce}
+          initialLatex={equationInitial}
+          initialMode={equationMode}
+          onClose={() => setEquationOpen(false)}
+          onInsert={insertEquation}
+        />
+      )}
     </div>
   )
 }

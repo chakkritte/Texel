@@ -172,6 +172,20 @@ body {
   line-height: 1.35rem;
 }
 
+/* CodeCogs equation editor surface */
+.cc-toolbar {
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+}
+.cc-latex:empty::before {
+  content: attr(data-placeholder);
+  color: var(--muted-2);
+  pointer-events: none;
+}
+.cc-latex:focus {
+  background: color-mix(in srgb, var(--accent) 5%, white);
+}
+
 .font-display {
   font-family: var(--font-display);
 }

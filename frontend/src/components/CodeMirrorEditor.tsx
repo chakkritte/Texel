@@ -48,6 +48,11 @@ type Props = {
   /** Reports a 0-based line selection (``to`` exclusive) or null when empty. */
   onSelectionChange?: (selection: Selection | null) => void
   onSelectionAction?: (action: SelectionAction, selection: Selection) => void
+  /** Exact character range of the current selection/cursor (for insertions). */
+  onSelectionRange?: (range: { from: number; to: number; text: string }) => void
+  /** Insert (and optionally replace the current selection with) text. */
+  insertRequest?: { text: string; nonce: number } | null
+  onInsertApplied?: () => void
 }
 
 type ToolbarState = {
@@ -70,6 +75,9 @@ export default function CodeMirrorEditor({
   aiActions = false,
   onSelectionChange,
   onSelectionAction,
+  onSelectionRange,
+  insertRequest = null,
+  onInsertApplied,
 }: Props) {
   const host = useRef<HTMLDivElement>(null)
   const view = useRef<EditorView | null>(null)
@@ -85,11 +93,24 @@ export default function CodeMirrorEditor({
   selectionChangeRef.current = onSelectionChange
   const selectionActionRef = useRef(onSelectionAction)
   selectionActionRef.current = onSelectionAction
+  const selectionRangeRef = useRef(onSelectionRange)
+  selectionRangeRef.current = onSelectionRange
   const lastSelectionRef = useRef<string | null>(null)
+  const lastRangeRef = useRef<string | null>(null)
   const [toolbar, setToolbar] = useState<ToolbarState | null>(null)
 
   const refreshSelection = useCallback((instance: EditorView) => {
     const main = instance.state.selection.main
+    const doc = instance.state.doc
+    const rangeKey = `${main.from}:${main.to}`
+    if (lastRangeRef.current !== rangeKey) {
+      lastRangeRef.current = rangeKey
+      selectionRangeRef.current?.({
+        from: main.from,
+        to: main.to,
+        text: main.empty ? '' : doc.sliceString(main.from, main.to).slice(0, 4000),
+      })
+    }
     if (main.empty) {
       setToolbar(null)
       if (lastSelectionRef.current !== null) {
@@ -99,7 +120,6 @@ export default function CodeMirrorEditor({
       return
     }
 
-    const doc = instance.state.doc
     const startLine = doc.lineAt(main.from).number - 1
     const endInfo = doc.lineAt(main.to)
     // ``to`` is exclusive; a selection that ends exactly at the start of a
@@ -136,7 +156,13 @@ export default function CodeMirrorEditor({
       Math.max(head.left, half + 8),
       Math.max(half + 8, window.innerWidth - half - 8),
     )
-    const top = head.top > 56 ? head.top - 44 : head.bottom + 8
+    // Keep the bar inside the editor pane; a viewport-relative threshold would
+    // let it float over the tab bar and block toolbar buttons.
+    const hostTop = host.current?.getBoundingClientRect().top ?? 0
+    const top =
+      head.top > hostTop + 56
+        ? head.top - 44
+        : Math.min(head.bottom + 8, window.innerHeight - 48)
     setToolbar((previous) =>
       previous &&
       previous.left === left &&
@@ -247,6 +273,24 @@ export default function CodeMirrorEditor({
     })
     instance.focus()
   }, [jump])
+
+  useEffect(() => {
+    const instance = view.current
+    if (!instance || !insertRequest) return
+    const selection = instance.state.selection.main
+    instance.dispatch({
+      changes: {
+        from: selection.from,
+        to: selection.to,
+        insert: insertRequest.text,
+      },
+      selection: { anchor: selection.from + insertRequest.text.length },
+      scrollIntoView: true,
+    })
+    instance.focus()
+    onInsertApplied?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [insertRequest])
 
   return (
     <div className="relative h-full">
