@@ -96,7 +96,7 @@ destroy unsupported LaTeX.
   switches back to source mode at the corresponding line.
 - Errors from the round-trip parser appear in a problems panel.
 
-## Current status (Phase 3.1 + 3.2a + 3.2b + 3.2c delivered)
+## Current status (Phase 3.1 + 3.2a/b/c + 3.3 delivered)
 
 Visual mode now has two tabs: **Document** (the visual editor) and **PDF**.
 
@@ -120,9 +120,18 @@ Implemented with:
 - Simple `itemize` and `enumerate` lists are editable item by item (including
   inline formatting). Editing an item rewrites the whole list environment with
   its original environment name.
-- Complex blocks (mixed math paragraphs for text, citations, references,
-  labeled/nested lists, images, unknown macros) are rendered read-only with an
-  "Edit in source" jump.
+- Citation/reference/label keys are rendered as chips; clicking one opens a key
+  editor that replaces only the key source range.
+- `\includegraphics` images are resolved from project files through the
+  authenticated download endpoint and displayed as blob URLs. Missing assets
+  render a placeholder.
+- Simple `tabular` tables are rendered visually (read-only) with captions and
+  labels; table editing remains source-only.
+- Visual edits carry an expected source slice. If a remote collaborator changed
+  that range first, the edit is rejected and a conflict notice is shown instead
+  of clobbering the other change.
+- Complex blocks (mixed math paragraphs for text, labeled/nested lists, table
+  cells, unknown macros) are rendered read-only with an "Edit in source" jump.
 
 Known limitations of this phase:
 
@@ -132,8 +141,12 @@ Known limitations of this phase:
   macros remain read-only.
 - Formatting is limited to the supported emphasis commands; colors, font sizes,
   links and arbitrary macros are source-only.
+- Citations are not resolved against `.bib` entries; only their keys are
+  editable.
+- Table cells, captions and column specs are source-only.
 - Only the active file is rendered; `\input`/`\include` are not expanded.
-- Images, citations and references are not resolved to project assets.
+- Collaboration safety is source-range based, not a ProseMirror/Yjs visual
+  document model.
 - Unknown macros degrade to text or empty spans.
 
 ## Delivery phases
@@ -159,11 +172,15 @@ Known limitations of this phase:
   delivered: unchanged blocks are never rewritten).
 - Round-trip tests on a corpus of real thesis/article files (pending).
 
-### Phase 3.3 — Structure and collaboration (3–4 weeks)
+### Phase 3.3 — Structure and collaboration (3–4 weeks) — delivered (supported subset)
 
-- Sections, citations/references, figures, simple tables.
-- Yjs/ProseMirror collaboration model and locking.
-- Source ↔ visual cursor mapping.
+- Citation/reference/label key editing (delivered).
+- `\includegraphics` figures resolved from project files (delivered).
+- Simple tabular tables rendered read-only (delivered).
+- Source-range conflict guard for visual edits (delivered).
+- Editable table cells, `.bib` citation resolution, nested structure (pending).
+- Full Yjs/ProseMirror collaboration model and source ↔ visual cursor mapping
+  (pending; current visual edits go through CodeMirror/Yjs source ranges).
 
 ### Phase 3.4 — Hardening (2 weeks)
 

@@ -22,7 +22,7 @@ import type { SelectionAction } from '../components/SelectionToolbar'
 import IconRail, { type PanelTab } from '../components/shell/IconRail'
 import StatusBar from '../components/shell/StatusBar'
 
-import type { VisualMathNode } from '../components/VisualEditor'
+import type { VisualMathNode, VisualRefNode } from '../components/VisualEditor'
 
 const VisualEditor = lazy(() => import('../components/VisualEditor'))
 
@@ -131,8 +131,12 @@ export default function Editor() {
     from: number
     to: number
     text: string
+    expected?: string
     nonce: number
   } | null>(null)
+  const [visualConflict, setVisualConflict] = useState(false)
+  const [referenceEdit, setReferenceEdit] = useState<VisualRefNode | null>(null)
+  const assetCacheRef = useRef<Map<string, string>>(new Map())
   const [equationOpen, setEquationOpen] = useState(false)
   const [equationNonce, setEquationNonce] = useState(0)
   const [equationInitial, setEquationInitial] = useState('')
@@ -225,7 +229,9 @@ export default function Editor() {
     setEditorSelection(null)
     setEquationOpen(false)
     setEquationEdit(null)
+    setReferenceEdit(null)
     setReplaceRequest(null)
+    setVisualConflict(false)
   }, [active?.id])
 
   function handleSelectionAction(action: SelectionAction, selection: Selection) {
@@ -252,13 +258,45 @@ export default function Editor() {
     setEquationOpen(true)
   }
 
-  function editVisualBlock(from: number, to: number, text: string) {
-    setReplaceRequest({ from, to, text, nonce: Date.now() })
+  function editVisualBlock(from: number, to: number, text: string, expected?: string) {
+    setReplaceRequest({ from, to, text, expected, nonce: Date.now() })
+  }
+
+  function editVisualRef(ref: VisualRefNode) {
+    setReferenceEdit(ref)
   }
 
   function editSourceAt(line: number) {
     setVisualMode(false)
     setJump({ line, column: 0, nonce: Date.now() })
+  }
+
+  async function resolveAsset(path: string): Promise<string | null> {
+    const normalized = path.replace(/\\/g, '/').replace(/^\.?\//, '')
+    const cached = assetCacheRef.current.get(normalized)
+    if (cached) return cached
+    const basename = normalized.split('/').pop()
+    const target =
+      tree.files.find((file) => relativePath(file, tree) === normalized) ??
+      tree.files.find((file) => file.name === normalized) ??
+      (basename ? tree.files.find((file) => file.name === basename) : undefined)
+    if (!target || target.kind !== 'binary') return null
+    try {
+      const token = getToken()
+      const response = await fetch(
+        `${import.meta.env.BASE_URL}api/v1/files/${target.id}/download`,
+        {
+          credentials: 'include',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        },
+      )
+      if (!response.ok) return null
+      const url = URL.createObjectURL(await response.blob())
+      assetCacheRef.current.set(normalized, url)
+      return url
+    } catch {
+      return null
+    }
   }
 
   function insertEquation(latex: string, mode: EquationMode) {
@@ -272,6 +310,7 @@ export default function Editor() {
         from: equationEdit.from,
         to: equationEdit.to,
         text,
+        expected: equationEdit.raw,
         nonce: Date.now(),
       })
       setEquationEdit(null)
@@ -1303,7 +1342,14 @@ export default function Editor() {
                   insertRequest={insertRequest}
                   onInsertApplied={() => setInsertRequest(null)}
                   replaceRequest={replaceRequest}
-                  onReplaceApplied={() => setReplaceRequest(null)}
+                  onReplaceApplied={() => {
+                    setReplaceRequest(null)
+                    setVisualConflict(false)
+                  }}
+                  onReplaceConflict={() => {
+                    setReplaceRequest(null)
+                    setVisualConflict(true)
+                  }}
                   onCursor={(line, column) => setCursor({ line, column })}
                   onChange={(value) => {
                     setContent(value)
@@ -1406,6 +1452,21 @@ export default function Editor() {
                   Visual editor · text, lists, equations
                 </span>
               </div>
+              {visualConflict && (
+                <div className="flex shrink-0 items-center gap-2 border-b border-[var(--danger)]/30 bg-[var(--danger-soft)] px-3 py-1.5 text-[11px] text-[var(--danger)]">
+                  <Icon name="warning" size={14} />
+                  <span className="flex-1">
+                    Source changed elsewhere; the visual edit was not applied.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setVisualConflict(false)}
+                    className="underline"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              )}
               <div className="min-h-0 flex-1">
                 {visualTab === 'document' ? (
                   active && isTextFile(active) ? (
@@ -1419,9 +1480,11 @@ export default function Editor() {
                       <VisualEditor
                         content={content}
                         fileName={active.name}
+                        resolveAsset={resolveAsset}
                         onEditBlock={editVisualBlock}
                         onEditSource={editSourceAt}
                         onEditMath={editVisualMath}
+                        onEditRef={editVisualRef}
                       />
                     </Suspense>
                   ) : (
@@ -1505,6 +1568,34 @@ export default function Editor() {
           onInsert={insertEquation}
         />
       )}
+
+      <ProjectNameDialog
+        open={Boolean(referenceEdit)}
+        title={
+          referenceEdit?.kind === 'cite'
+            ? 'Edit citation'
+            : referenceEdit?.kind === 'ref'
+              ? 'Edit reference'
+              : 'Edit label'
+        }
+        initialName={referenceEdit?.value ?? ''}
+        submitLabel="Save"
+        onClose={() => setReferenceEdit(null)}
+        onSubmit={async (value) => {
+          if (!referenceEdit) return
+          if (/[\\{}]/.test(value)) {
+            throw new Error('Keys cannot contain backslashes or braces')
+          }
+          setReplaceRequest({
+            from: referenceEdit.from,
+            to: referenceEdit.to,
+            text: value,
+            expected: referenceEdit.raw,
+            nonce: Date.now(),
+          })
+          setReferenceEdit(null)
+        }}
+      />
     </div>
   )
 }

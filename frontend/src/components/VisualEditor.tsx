@@ -162,16 +162,36 @@ function serializeChildren(element: HTMLElement): string {
 export type VisualMathNode = {
   from: number
   to: number
+  raw: string
   inner: string
   open: string
   close: string
   display: boolean
 }
 
+export type VisualRefNode = {
+  kind: 'cite' | 'ref' | 'label'
+  from: number
+  to: number
+  value: string
+  raw: string
+}
+
+const REF_MACROS: Record<string, VisualRefNode['kind']> = {
+  cite: 'cite',
+  citep: 'cite',
+  citet: 'cite',
+  ref: 'ref',
+  eqref: 'ref',
+  autoref: 'ref',
+  pageref: 'ref',
+  label: 'label',
+}
+
 function parseMathRaw(
   raw: string,
   displayHint: boolean,
-): Omit<VisualMathNode, 'from' | 'to'> | null {
+): Omit<VisualMathNode, 'from' | 'to' | 'raw'> | null {
   if (!raw.trim()) return null
   if (raw.startsWith('$$') && raw.endsWith('$$') && raw.length >= 4) {
     return { inner: raw.slice(2, -2).trim(), open: '$$', close: '$$', display: true }
@@ -211,8 +231,9 @@ function collectMath(nodes: any[], source: string, out: VisualMathNode[]): void 
       const from = node.position?.start?.offset
       const to = node.position?.end?.offset
       if (typeof from === 'number' && typeof to === 'number' && to > from) {
-        const info = parseMathRaw(source.slice(from, to), node.type !== 'inlinemath')
-        if (info) out.push({ from, to, ...info })
+        const raw = source.slice(from, to)
+        const info = parseMathRaw(raw, node.type !== 'inlinemath')
+        if (info) out.push({ from, to, raw, ...info })
       }
       continue
     }
@@ -220,6 +241,36 @@ function collectMath(nodes: any[], source: string, out: VisualMathNode[]): void 
     if (Array.isArray(node.args)) {
       for (const arg of node.args) {
         if (Array.isArray(arg.content)) collectMath(arg.content, source, out)
+      }
+    }
+  }
+}
+
+function collectRefs(nodes: any[], source: string, out: VisualRefNode[]): void {
+  for (const node of nodes) {
+    if (node?.type === 'macro' && REF_MACROS[node.content]) {
+      const args = Array.isArray(node.args) ? node.args : []
+      const keyArg = args[args.length - 1]
+      const content = Array.isArray(keyArg?.content) ? keyArg.content : []
+      if (content.length > 0) {
+        const from = content[0].position?.start?.offset
+        const to = content[content.length - 1].position?.end?.offset
+        if (typeof from === 'number' && typeof to === 'number' && to > from) {
+          out.push({
+            kind: REF_MACROS[node.content],
+            from,
+            to,
+            value: nodeText(content).trim(),
+            raw: source.slice(from, to),
+          })
+        }
+      }
+      continue
+    }
+    if (Array.isArray(node.content)) collectRefs(node.content, source, out)
+    if (Array.isArray(node.args)) {
+      for (const arg of node.args) {
+        if (Array.isArray(arg.content)) collectRefs(arg.content, source, out)
       }
     }
   }
@@ -299,6 +350,7 @@ function lineAt(content: string, offset: number): number {
 function buildBlocks(content: string): {
   blocks: Block[]
   mathNodes: VisualMathNode[]
+  refNodes: VisualRefNode[]
   error: string
 } {
   let tree: any
@@ -308,6 +360,7 @@ function buildBlocks(content: string): {
     return {
       blocks: [],
       mathNodes: [],
+      refNodes: [],
       error: err instanceof Error ? err.message : 'Could not parse this LaTeX file',
     }
   }
@@ -317,7 +370,9 @@ function buildBlocks(content: string): {
   const body: any[] = document?.content ?? tree.content
   const blocks: Block[] = []
   const mathNodes: VisualMathNode[] = []
+  const refNodes: VisualRefNode[] = []
   collectMath(body, content, mathNodes)
+  collectRefs(body, content, refNodes)
   let buffer: any[] = []
 
   const blockEnd = (node: any): number => {
@@ -325,8 +380,9 @@ function buildBlocks(content: string): {
     if (Array.isArray(node.args)) {
       for (const arg of node.args) {
         const items = Array.isArray(arg.content) ? arg.content : []
+        const closeMark = typeof arg.closeMark === 'string' ? arg.closeMark.length : 0
         for (const item of items) {
-          end = Math.max(end, item.position?.end?.offset ?? 0)
+          end = Math.max(end, (item.position?.end?.offset ?? 0) + closeMark)
         }
       }
     }
@@ -338,7 +394,7 @@ function buildBlocks(content: string): {
     const first = buffer[0]
     const last = buffer[buffer.length - 1]
     const from = first.position?.start?.offset ?? 0
-    const to = last.position?.end?.offset ?? from
+    const to = Math.max(last.position?.end?.offset ?? from, blockEnd(last))
     const model = buildInline(buffer)
     if (model) {
       blocks.push({
@@ -431,7 +487,9 @@ function buildBlocks(content: string): {
 
     flush()
     const from = node.position?.start?.offset ?? 0
-    const to = node.position?.end?.offset ?? from
+    // Macro positions cover only the command name; include its arguments
+    // (e.g. \includegraphics[...]{file}) in the raw block.
+    const to = Math.max(node.position?.end?.offset ?? from, blockEnd(node))
     blocks.push({
       kind: 'readonly',
       raw: content.slice(from, to),
@@ -441,7 +499,7 @@ function buildBlocks(content: string): {
     })
   }
   flush()
-  return { blocks, mathNodes, error: '' }
+  return { blocks, mathNodes, refNodes, error: '' }
 }
 
 function plainPaste(event: ClipboardEvent<HTMLElement>) {
@@ -455,18 +513,21 @@ function EditableHeading({
   text,
   from,
   to,
+  expected,
   onEdit,
 }: {
   level: 2 | 3 | 4
   text: string
   from: number
   to: number
-  onEdit: (from: number, to: number, text: string) => void
+  expected: string
+  onEdit: (from: number, to: number, text: string, expected?: string) => void
 }) {
   const Tag = (`h${level}` as 'h2' | 'h3' | 'h4')
   function blur(event: FocusEvent<HTMLElement>) {
     const next = (event.currentTarget.innerText || '').replace(/ /g, ' ').trim()
-    if (normalizeText(next) !== normalizeText(text)) onEdit(from, to, escapeLatex(next))
+    if (normalizeText(next) !== normalizeText(text))
+      onEdit(from, to, escapeLatex(next), expected)
   }
   function keyDown(event: KeyboardEvent<HTMLElement>) {
     if (event.key === 'Enter') event.preventDefault()
@@ -490,19 +551,21 @@ function EditableFormattedParagraph({
   model,
   from,
   to,
+  expected,
   onEdit,
 }: {
   model: InlineNode[]
   from: number
   to: number
-  onEdit: (from: number, to: number, text: string) => void
+  expected: string
+  onEdit: (from: number, to: number, text: string, expected?: string) => void
 }) {
   const initial = useMemo(() => modelToLatex(model), [model])
   function blur(event: FocusEvent<HTMLElement>) {
     const next = serializeChildren(event.currentTarget)
       .replace(/\u00a0/g, ' ')
       .replace(/[ \t]+$/, '')
-    if (next !== initial) onEdit(from, to, next)
+    if (next !== initial) onEdit(from, to, next, expected)
   }
   function keyDown(event: KeyboardEvent<HTMLElement>) {
     if (event.key === 'Enter') event.preventDefault()
@@ -528,13 +591,15 @@ function EditableList({
   items,
   from,
   to,
+  expected,
   onEdit,
 }: {
   ordered: boolean
   items: InlineNode[][]
   from: number
   to: number
-  onEdit: (from: number, to: number, text: string) => void
+  expected: string
+  onEdit: (from: number, to: number, text: string, expected?: string) => void
 }) {
   const initial = useMemo(() => items.map((item) => modelToLatex(item)), [items])
   function blurItem(index: number, event: FocusEvent<HTMLElement>) {
@@ -548,7 +613,7 @@ function EditableList({
     const text = `\\begin{${environment}}\n${updated
       .map((item) => `\\item ${item.trim()}`)
       .join('\n')}\n\\end{${environment}}`
-    onEdit(from, to, text)
+    onEdit(from, to, text, expected)
   }
   function keyDown(event: KeyboardEvent<HTMLElement>) {
     if (event.key === 'Enter') event.preventDefault()
@@ -579,49 +644,114 @@ function ReadonlyBlock({
   raw,
   line,
   mathNodes,
+  refNodes,
+  resolveAsset,
   onEditSource,
   onEditMath,
+  onEditRef,
 }: {
   raw: string
   line: number
   mathNodes: VisualMathNode[]
+  refNodes: VisualRefNode[]
+  resolveAsset?: (path: string) => Promise<string | null>
   onEditSource: (line: number) => void
   onEditMath: (math: VisualMathNode) => void
+  onEditRef: (ref: VisualRefNode) => void
 }) {
   const hostRef = useRef<HTMLDivElement>(null)
   const editMathRef = useRef(onEditMath)
   editMathRef.current = onEditMath
+  const editRefRef = useRef(onEditRef)
+  editRefRef.current = onEditRef
+  const resolveAssetRef = useRef(resolveAsset)
+  resolveAssetRef.current = resolveAsset
   const { html, error } = useMemo(() => latexToHtml(raw), [raw])
+
   useEffect(() => {
     const host = hostRef.current
     if (!host) return
     renderMathIn(host)
-    const elements = Array.from(
+    const mathElements = Array.from(
       host.querySelectorAll<HTMLElement>('.inline-math, .display-math'),
     )
-    // Only map when the rendered order matches the AST order; otherwise a
-    // click could target the wrong equation.
-    if (elements.length !== mathNodes.length) return
-    elements.forEach((element, index) => {
-      element.dataset.mathIndex = String(index)
-      element.classList.add('math-clickable')
-      element.title = 'Click to edit equation'
-    })
+    if (mathElements.length === mathNodes.length) {
+      mathElements.forEach((element, index) => {
+        element.dataset.mathIndex = String(index)
+        element.classList.add('math-clickable')
+        element.title = 'Click to edit equation'
+      })
+    }
+    const refElements = Array.from(
+      host.querySelectorAll<HTMLElement>(
+        '.macro-cite, .macro-citep, .macro-citet, .macro-ref, .macro-eqref, .macro-autoref, .macro-pageref, .macro-label',
+      ),
+    )
+    if (refElements.length === refNodes.length) {
+      refElements.forEach((element, index) => {
+        element.dataset.refIndex = String(index)
+        element.classList.add('ref-chip')
+        element.title = 'Click to edit this key'
+      })
+    }
     const onClick = (event: MouseEvent) => {
-      const target = (event.target as HTMLElement | null)?.closest(
+      const mathTarget = (event.target as HTMLElement | null)?.closest(
         '[data-math-index]',
       ) as HTMLElement | null
-      if (!target) return
-      const index = Number(target.dataset.mathIndex)
-      const math = mathNodes[index]
-      if (!math) return
+      if (mathTarget) {
+        const index = Number(mathTarget.dataset.mathIndex)
+        const math = mathNodes[index]
+        if (!math) return
+        event.preventDefault()
+        event.stopPropagation()
+        editMathRef.current(math)
+        return
+      }
+      const refTarget = (event.target as HTMLElement | null)?.closest(
+        '[data-ref-index]',
+      ) as HTMLElement | null
+      if (!refTarget) return
+      const index = Number(refTarget.dataset.refIndex)
+      const ref = refNodes[index]
+      if (!ref) return
       event.preventDefault()
       event.stopPropagation()
-      editMathRef.current(math)
+      editRefRef.current(ref)
     }
     host.addEventListener('click', onClick)
     return () => host.removeEventListener('click', onClick)
-  }, [html, mathNodes])
+  }, [html, mathNodes, refNodes])
+
+  useEffect(() => {
+    const host = hostRef.current
+    if (!host) return
+    let cancelled = false
+    const images = Array.from(
+      host.querySelectorAll<HTMLImageElement>('img.includegraphics'),
+    )
+    images.forEach((image) => {
+      const path = image.getAttribute('src') ?? ''
+      if (!path) return
+      image.loading = 'lazy'
+      resolveAssetRef.current?.(path)
+        .then((url) => {
+          if (cancelled) return
+          if (url) {
+            image.src = url
+          } else {
+            image.alt = `Missing image: ${path}`
+            image.classList.add('missing-image')
+          }
+        })
+        .catch(() => {
+          /* leave the placeholder */
+        })
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [html, resolveAsset])
+
   return (
     <div className="visual-readonly group/block relative">
       {error ? (
@@ -646,6 +776,7 @@ function ReadonlyBlock({
   )
 }
 
+
 function applyFormat(command: 'bold' | 'italic' | 'underline'): void {
   try {
     document.execCommand(command)
@@ -668,17 +799,24 @@ function applyCode(): void {
 export default function VisualEditor({
   content,
   fileName,
+  resolveAsset,
   onEditBlock,
   onEditSource,
   onEditMath,
+  onEditRef,
 }: {
   content: string
   fileName: string
-  onEditBlock: (from: number, to: number, text: string) => void
+  resolveAsset?: (path: string) => Promise<string | null>
+  onEditBlock: (from: number, to: number, text: string, expected?: string) => void
   onEditSource: (line: number) => void
   onEditMath: (math: VisualMathNode) => void
+  onEditRef: (ref: VisualRefNode) => void
 }) {
-  const { blocks, mathNodes, error } = useMemo(() => buildBlocks(content), [content])
+  const { blocks, mathNodes, refNodes, error } = useMemo(
+    () => buildBlocks(content),
+    [content],
+  )
 
   if (error) {
     return (
@@ -756,6 +894,7 @@ export default function VisualEditor({
                   text={block.text}
                   from={block.from}
                   to={block.to}
+                  expected={content.slice(block.from, block.to)}
                   onEdit={onEditBlock}
                 />
               )
@@ -767,6 +906,7 @@ export default function VisualEditor({
                   model={block.model}
                   from={block.from}
                   to={block.to}
+                  expected={content.slice(block.from, block.to)}
                   onEdit={onEditBlock}
                 />
               )
@@ -779,6 +919,7 @@ export default function VisualEditor({
                   items={block.items}
                   from={block.from}
                   to={block.to}
+                  expected={content.slice(block.from, block.to)}
                   onEdit={onEditBlock}
                 />
               )
@@ -791,8 +932,13 @@ export default function VisualEditor({
                   mathNodes={mathNodes.filter(
                     (math) => math.from >= block.from && math.to <= block.to,
                   )}
+                  refNodes={refNodes.filter(
+                    (ref) => ref.from >= block.from && ref.to <= block.to,
+                  )}
+                  resolveAsset={resolveAsset}
                   onEditSource={onEditSource}
                   onEditMath={onEditMath}
+                  onEditRef={onEditRef}
                 />
               </div>
             )

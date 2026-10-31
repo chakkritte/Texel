@@ -285,6 +285,65 @@ body {
   padding: 0.06em 0.14em;
   margin: -0.06em -0.14em;
 }
+.latex-visual .macro-cite,
+.latex-visual .macro-citep,
+.latex-visual .macro-citet,
+.latex-visual .macro-ref,
+.latex-visual .macro-eqref,
+.latex-visual .macro-autoref,
+.latex-visual .macro-pageref {
+  background: color-mix(in srgb, var(--accent) 12%, white);
+  border-radius: 999px;
+  color: var(--accent);
+  cursor: pointer;
+  display: inline-block;
+  font-family: var(--font-sans);
+  font-size: 0.82em;
+  padding: 0 0.4em;
+}
+.latex-visual .macro-label {
+  background: #f3f4f6;
+  border-radius: 999px;
+  color: #6b7280;
+  cursor: pointer;
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.78em;
+  padding: 0 0.4em;
+}
+.latex-visual .macro-caption {
+  color: #111827;
+  display: block;
+  font-family: var(--font-display);
+  font-size: 0.9em;
+  font-weight: 600;
+  margin: 0.8em 0 0.35em;
+}
+.latex-visual .environment.table {
+  margin: 1em 0;
+}
+.latex-visual table.tabular {
+  margin-left: auto;
+  margin-right: auto;
+  width: auto;
+}
+.latex-visual table.tabular td {
+  text-align: left;
+  vertical-align: top;
+}
+.latex-visual img.includegraphics {
+  border-radius: 0.4rem;
+  display: block;
+  height: auto;
+  margin: 0.6em auto;
+  max-width: 100%;
+}
+.latex-visual img.missing-image {
+  background: #f3f4f6;
+  border: 1px dashed #d1d5db;
+  min-height: 90px;
+  min-width: 120px;
+}
 .latex-visual .math-clickable:hover {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
 }

@@ -11,7 +11,7 @@ assistant.
 - CodeMirror 6 editor for `.tex`, `.bib`, `.sty`, `.cls` and other text files
 - PDF preview with forward/inverse SyncTeX
 - Equation builder popup with a visual toolbar and live preview (CodeCogs)
-- Visual editor with inline formatting (B/I/U), editable bullet/numbered lists, click-to-edit equations, and a PDF/SyncTeX view (Phase 3.2c)
+- Visual editor with inline formatting (B/I/U), editable lists, click-to-edit equations, citation/reference key editing, resolved figures, table rendering, and a PDF/SyncTeX view (Phase 3.3)
 - Compilation with a configurable engine:
   - `pdflatex`, `xelatex`, `lualatex` via TeX Live + `latexmk`
   - Tectonic as a fallback
@@ -79,11 +79,15 @@ docker-compose.yml Local deployment
 - The Visual mode Document tab edits plain paragraphs and headings inline,
   supports bold/italic/underline/monospace via the B/I/U toolbar, edits simple
   `itemize`/`enumerate` lists, and lets you click an inline/display equation to
-  edit it with the equation builder (Phase 3.2c). Math delimiters and
-  environments are preserved, edits are source-mapped, and LaTeX-special
-  characters are escaped automatically. Complex constructs (citations,
-  references, nested or labeled lists, images, unknown macros) are rendered
-  read-only with an "Edit in source" action. Only the active file is shown;
+  edit it with the equation builder. Citation/reference/label keys are rendered
+  as clickable chips that edit their source keys, `\includegraphics` figures are
+  loaded from project files, and simple `tabular` tables are rendered
+  read-only (Phase 3.3). Math delimiters and environments are preserved, edits
+  are source-mapped, and LaTeX-special characters are escaped automatically.
+  Visual edits carry an expected source range, so an edit that races a remote
+  change is rejected with a notice instead of overwriting it. Nested or labeled
+  lists, editable table cells, citations resolved against `.bib` entries and
+  unresolved macros remain source-only. Only the active file is shown;
   `\input`/`\include` are not expanded. See
   [`docs/visual-editor-plan.md`](docs/visual-editor-plan.md) for the
   architecture, safety constraints and remaining phases.
