@@ -1403,7 +1403,7 @@ export default function Editor() {
                   <Icon name="picture_as_pdf" size={14} /> PDF
                 </button>
                 <span className="ml-auto pr-1 text-[10px] text-[var(--muted)]">
-                  Visual editor · text blocks
+                  Visual editor · text, lists, equations
                 </span>
               </div>
               <div className="min-h-0 flex-1">

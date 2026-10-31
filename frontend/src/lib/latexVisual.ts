@@ -35,6 +35,10 @@ export function isEscapedTextNode(node: any): boolean {
   )
 }
 
+export function escapedTextOf(node: any): string | null {
+  return isEscapedTextNode(node) ? ESCAPED_TEXT[node.content] : null
+}
+
 export function nodeText(nodes: any[]): string {
   return nodes
     .map((node) => {

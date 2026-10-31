@@ -11,7 +11,7 @@ assistant.
 - CodeMirror 6 editor for `.tex`, `.bib`, `.sty`, `.cls` and other text files
 - PDF preview with forward/inverse SyncTeX
 - Equation builder popup with a visual toolbar and live preview (CodeCogs)
-- Visual editor with inline editing for plain text, click-to-edit equations, and a PDF/SyncTeX view (Phase 3.2b)
+- Visual editor with inline formatting (B/I/U), editable bullet/numbered lists, click-to-edit equations, and a PDF/SyncTeX view (Phase 3.2c)
 - Compilation with a configurable engine:
   - `pdflatex`, `xelatex`, `lualatex` via TeX Live + `latexmk`
   - Tectonic as a fallback
@@ -76,12 +76,14 @@ docker-compose.yml Local deployment
 - The equation builder uses the free CodeCogs equation-editor API. CodeCogs
   displays a retirement notice for this API; moving to fxEditor requires a
   domain-bound licence. The editor is an equation tool only.
-- The Visual mode Document tab edits plain paragraphs and headings inline and
-  lets you click an inline/display equation to edit it with the equation
-  builder (Phase 3.2b). Math delimiters and environments are preserved, edits
-  are source-mapped, and LaTeX-special characters are escaped automatically.
-  Blocks containing other complex constructs (lists, formatting, unknown
-  macros) are rendered read-only with an "Edit in source" action. Only the
-  active file is shown; `\input`/`\include` are not expanded. See
+- The Visual mode Document tab edits plain paragraphs and headings inline,
+  supports bold/italic/underline/monospace via the B/I/U toolbar, edits simple
+  `itemize`/`enumerate` lists, and lets you click an inline/display equation to
+  edit it with the equation builder (Phase 3.2c). Math delimiters and
+  environments are preserved, edits are source-mapped, and LaTeX-special
+  characters are escaped automatically. Complex constructs (citations,
+  references, nested or labeled lists, images, unknown macros) are rendered
+  read-only with an "Edit in source" action. Only the active file is shown;
+  `\input`/`\include` are not expanded. See
   [`docs/visual-editor-plan.md`](docs/visual-editor-plan.md) for the
   architecture, safety constraints and remaining phases.

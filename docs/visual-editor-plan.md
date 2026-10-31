@@ -96,7 +96,7 @@ destroy unsupported LaTeX.
   switches back to source mode at the corresponding line.
 - Errors from the round-trip parser appear in a problems panel.
 
-## Current status (Phase 3.1 + 3.2a + 3.2b delivered)
+## Current status (Phase 3.1 + 3.2a + 3.2b + 3.2c delivered)
 
 Visual mode now has two tabs: **Document** (the visual editor) and **PDF**.
 
@@ -114,15 +114,24 @@ Implemented with:
 - Inline and display math nodes are mapped back to their source ranges; clicking
   a rendered equation opens the equation builder and preserves its delimiters
   or environment (`$...$`, `\(...\)`, `\[...\]`, `equation`, `align`, ...).
-- Complex blocks (lists, formatting, environments, unknown macros) are rendered
-  read-only with an "Edit in source" jump.
+- Inline formatting (`\textbf`, `\textit`, `\emph`, `\underline`, `\texttt`,
+  `\textsc`) is editable through a B/I/U toolbar; the DOM is serialized back to
+  LaTeX on blur.
+- Simple `itemize` and `enumerate` lists are editable item by item (including
+  inline formatting). Editing an item rewrites the whole list environment with
+  its original environment name.
+- Complex blocks (mixed math paragraphs for text, citations, references,
+  labeled/nested lists, images, unknown macros) are rendered read-only with an
+  "Edit in source" jump.
 
 Known limitations of this phase:
 
 - Text inside a mixed block (a paragraph containing math or macros) is still
   read-only; only its equations are click-to-edit.
-- Inline formatting (bold/italic) and lists cannot yet be edited from the
-  visual view.
+- `\item[label]`, nested lists, and list items containing math or unsupported
+  macros remain read-only.
+- Formatting is limited to the supported emphasis commands; colors, font sizes,
+  links and arbitrary macros are source-only.
 - Only the active file is rendered; `\input`/`\include` are not expanded.
 - Images, citations and references are not resolved to project assets.
 - Unknown macros degrade to text or empty spans.
@@ -135,7 +144,7 @@ Known limitations of this phase:
 - Unknown constructs render as text/source fallbacks.
 - No mutations; useful to validate the parser and rendering.
 
-### Phase 3.2 — Editable text + math (3–4 weeks) — text/headings/math delivered
+### Phase 3.2 — Editable text + math + formatting/lists (3–4 weeks) — delivered (supported subset)
 
 - Plain paragraph/heading editing with AST source ranges and safe escaping
   (delivered).
@@ -143,7 +152,9 @@ Known limitations of this phase:
   (delivered).
 - Click-to-edit inline and display equations with delimiter/environment
   preservation (delivered).
-- Inline formatting (bold/italic) and list editing (pending).
+- Inline formatting through a B/I/U toolbar with LaTeX serialization
+  (delivered).
+- Simple itemize/enumerate list editing with inline formatting (delivered).
 - Serializer with verbatim preservation of unchanged source slices (partially
   delivered: unchanged blocks are never rewritten).
 - Round-trip tests on a corpus of real thesis/article files (pending).

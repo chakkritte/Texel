@@ -1,8 +1,15 @@
-import { useEffect, useMemo, useRef } from 'react'
-import type { ClipboardEvent, FocusEvent, KeyboardEvent } from 'react'
+import { createElement, useEffect, useMemo, useRef } from 'react'
+import type { ClipboardEvent, FocusEvent, KeyboardEvent, ReactNode } from 'react'
 import { unified } from 'unified'
 import { unifiedLatexFromString } from '@unified-latex/unified-latex-util-parse'
-import { isEscapedTextNode, latexToHtml, nodeText, renderMathIn } from '../lib/latexVisual'
+import { getArgsContent } from '@unified-latex/unified-latex-util-arguments'
+import {
+  escapedTextOf,
+  isEscapedTextNode,
+  latexToHtml,
+  nodeText,
+  renderMathIn,
+} from '../lib/latexVisual'
 
 const SECTION_LEVELS: Record<string, 2 | 3 | 4> = {
   section: 2,
@@ -37,10 +44,120 @@ const INLINE_MACROS = new Set([
   'mbox',
 ])
 
+type InlineNode =
+  | { type: 'text'; text: string }
+  | { type: 'format'; command: string; children: InlineNode[] }
+
+const INLINE_FORMATS: Record<string, { tag: string }> = {
+  textbf: { tag: 'strong' },
+  textit: { tag: 'em' },
+  emph: { tag: 'em' },
+  underline: { tag: 'u' },
+  texttt: { tag: 'code' },
+  textsc: { tag: 'span' },
+}
+
 type Block =
   | { kind: 'heading'; level: 2 | 3 | 4; text: string; from: number; to: number }
-  | { kind: 'paragraph'; text: string; from: number; to: number }
+  | { kind: 'formatted'; model: InlineNode[]; from: number; to: number }
+  | { kind: 'list'; ordered: boolean; items: InlineNode[][]; from: number; to: number }
   | { kind: 'readonly'; raw: string; from: number; to: number; line: number }
+
+function pushText(target: InlineNode[], text: string): void {
+  if (!text) return
+  const last = target[target.length - 1]
+  if (last?.type === 'text') last.text += text
+  else target.push({ type: 'text', text })
+}
+
+function buildInline(nodes: any[]): InlineNode[] | null {
+  const out: InlineNode[] = []
+  for (const node of nodes) {
+    if (node?.type === 'string') {
+      pushText(out, node.content ?? '')
+      continue
+    }
+    if (node?.type === 'whitespace') {
+      pushText(out, node.content ?? ' ')
+      continue
+    }
+    const escaped = escapedTextOf(node)
+    if (escaped !== null) {
+      pushText(out, escaped)
+      continue
+    }
+    if (node?.type === 'macro' && INLINE_FORMATS[node.content]) {
+      const args = getArgsContent(node)[0]
+      if (!Array.isArray(args) || args.length === 0) return null
+      const children = buildInline(args)
+      if (!children) return null
+      out.push({ type: 'format', command: node.content, children })
+      continue
+    }
+    return null
+  }
+  return out
+}
+
+function modelToLatex(nodes: InlineNode[]): string {
+  return nodes
+    .map((node) =>
+      node.type === 'text'
+        ? escapeLatex(node.text)
+        : `\\${node.command}{${modelToLatex(node.children)}}`,
+    )
+    .join('')
+}
+
+function renderInline(nodes: InlineNode[], prefix = ''): ReactNode[] {
+  return nodes.map((node, index) => {
+    if (node.type === 'text') return node.text
+    const format = INLINE_FORMATS[node.command] ?? { tag: 'span' }
+    return createElement(
+      format.tag,
+      {
+        key: `${prefix}${index}`,
+        'data-cmd': node.command,
+        style: node.command === 'textsc' ? { fontVariant: 'small-caps' } : undefined,
+      },
+      ...renderInline(node.children, `${prefix}${index}-`),
+    )
+  })
+}
+
+function serializeChildren(element: HTMLElement): string {
+  let out = ''
+  element.childNodes.forEach((child) => {
+    if (child.nodeType === Node.TEXT_NODE) {
+      out += escapeLatex((child.textContent ?? '').replace(/ /g, ' '))
+      return
+    }
+    if (child.nodeType !== Node.ELEMENT_NODE) return
+    const el = child as HTMLElement
+    const tag = el.tagName
+    const inner = serializeChildren(el)
+    if (tag === 'BR') {
+      out += '\n'
+    } else if (tag === 'B' || tag === 'STRONG') {
+      out += `\\textbf{${inner}}`
+    } else if (tag === 'I' || tag === 'EM') {
+      out += `\\${el.dataset.cmd || 'textit'}{${inner}}`
+    } else if (tag === 'U') {
+      out += `\\underline{${inner}}`
+    } else if (tag === 'CODE') {
+      out += `\\texttt{${inner}}`
+    } else if (tag === 'SUP') {
+      out += `\\textsuperscript{${inner}}`
+    } else if (tag === 'SUB') {
+      out += `\\textsubscript{${inner}}`
+    } else if (tag === 'SPAN' && el.dataset.cmd === 'textsc') {
+      out += `\\textsc{${inner}}`
+    } else {
+      out += inner
+    }
+  })
+  return out
+}
 
 export type VisualMathNode = {
   from: number
@@ -110,6 +227,33 @@ function collectMath(nodes: any[], source: string, out: VisualMathNode[]): void 
 
 function isPlainNode(node: any): boolean {
   return node?.type === 'string' || node?.type === 'whitespace' || isEscapedTextNode(node)
+}
+
+function parseListItems(node: any): InlineNode[][] | null {
+  const items: any[][] = []
+  for (const child of node.content ?? []) {
+    if (child?.type !== 'macro' || child.content !== 'item') continue
+    const args = Array.isArray(child.args) ? child.args : []
+    const contentArg = args[args.length - 1]
+    const rawContent = Array.isArray(contentArg?.content) ? contentArg.content : []
+    // Only support plain \item (no optional \item[label]).
+    const hasLabel = args
+      .slice(0, -1)
+      .some((arg: any) => Array.isArray(arg.content) && arg.content.length > 0)
+    if (hasLabel) return null
+    const first = rawContent.findIndex((part: any) => part?.type !== 'whitespace')
+    if (first === -1) {
+      items.push([])
+      continue
+    }
+    let last = rawContent.length - 1
+    while (last > first && rawContent[last]?.type === 'whitespace') last -= 1
+    items.push(rawContent.slice(first, last + 1))
+  }
+  if (items.length === 0) return null
+  const models = items.map((item) => buildInline(item))
+  if (models.some((model) => model === null)) return null
+  return models as InlineNode[][]
 }
 
 function isInlineNode(node: any): boolean {
@@ -195,11 +339,11 @@ function buildBlocks(content: string): {
     const last = buffer[buffer.length - 1]
     const from = first.position?.start?.offset ?? 0
     const to = last.position?.end?.offset ?? from
-    const plain = buffer.every(isPlainNode)
-    if (plain) {
+    const model = buildInline(buffer)
+    if (model) {
       blocks.push({
-        kind: 'paragraph',
-        text: nodeText(buffer),
+        kind: 'formatted',
+        model,
         from,
         to,
       })
@@ -241,6 +385,34 @@ function buildBlocks(content: string): {
       } else {
         const from = node.position?.start?.offset ?? 0
         const to = blockEnd(node)
+        blocks.push({
+          kind: 'readonly',
+          raw: content.slice(from, to),
+          from,
+          to,
+          line: lineAt(content, from),
+        })
+      }
+      continue
+    }
+
+    if (
+      node.type === 'environment' &&
+      (node.env === 'itemize' || node.env === 'enumerate')
+    ) {
+      flush()
+      const from = node.position?.start?.offset ?? 0
+      const to = node.position?.end?.offset ?? from
+      const items = parseListItems(node)
+      if (items) {
+        blocks.push({
+          kind: 'list',
+          ordered: node.env === 'enumerate',
+          items,
+          from,
+          to,
+        })
+      } else {
         blocks.push({
           kind: 'readonly',
           raw: content.slice(from, to),
@@ -314,35 +486,92 @@ function EditableHeading({
   )
 }
 
-function EditableParagraph({
-  text,
+function EditableFormattedParagraph({
+  model,
   from,
   to,
   onEdit,
 }: {
-  text: string
+  model: InlineNode[]
   from: number
   to: number
   onEdit: (from: number, to: number, text: string) => void
 }) {
+  const initial = useMemo(() => modelToLatex(model), [model])
   function blur(event: FocusEvent<HTMLElement>) {
-    const next = (event.currentTarget.innerText || '')
-      .replace(/ /g, ' ')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim()
-    if (normalizeText(next) !== normalizeText(text)) onEdit(from, to, escapeLatex(next))
+    const next = serializeChildren(event.currentTarget)
+      .replace(/\u00a0/g, ' ')
+      .replace(/[ \t]+$/, '')
+    if (next !== initial) onEdit(from, to, next)
+  }
+  function keyDown(event: KeyboardEvent<HTMLElement>) {
+    if (event.key === 'Enter') event.preventDefault()
   }
   return (
     <p
       contentEditable
       suppressContentEditableWarning
       onBlur={blur}
+      onKeyDown={keyDown}
       onPaste={plainPaste}
       spellCheck
-      title="Editable paragraph"
-      className="visual-editable"
-      dangerouslySetInnerHTML={{ __html: escapeHtml(text) }}
-    />
+      title="Editable paragraph — select text to use B/I/U"
+      className="visual-editable whitespace-pre-wrap"
+    >
+      {renderInline(model)}
+    </p>
+  )
+}
+
+function EditableList({
+  ordered,
+  items,
+  from,
+  to,
+  onEdit,
+}: {
+  ordered: boolean
+  items: InlineNode[][]
+  from: number
+  to: number
+  onEdit: (from: number, to: number, text: string) => void
+}) {
+  const initial = useMemo(() => items.map((item) => modelToLatex(item)), [items])
+  function blurItem(index: number, event: FocusEvent<HTMLElement>) {
+    const next = serializeChildren(event.currentTarget)
+      .replace(/\u00a0/g, ' ')
+      .replace(/[ \t]+$/, '')
+    if (next === initial[index]) return
+    const updated = [...initial]
+    updated[index] = next
+    const environment = ordered ? 'enumerate' : 'itemize'
+    const text = `\\begin{${environment}}\n${updated
+      .map((item) => `\\item ${item.trim()}`)
+      .join('\n')}\n\\end{${environment}}`
+    onEdit(from, to, text)
+  }
+  function keyDown(event: KeyboardEvent<HTMLElement>) {
+    if (event.key === 'Enter') event.preventDefault()
+  }
+  const ListTag = ordered ? 'ol' : 'ul'
+  return (
+    <ListTag className={ordered ? 'list-decimal' : 'list-disc'}>
+      {items.map((model, index) => (
+        <li
+          key={`${from}-${index}`}
+          contentEditable
+          suppressContentEditableWarning
+          onBlur={(event) => blurItem(index, event)}
+          onKeyDown={keyDown}
+          onPaste={plainPaste}
+          spellCheck
+          title="Editable list item — select text to use B/I/U"
+          className="visual-editable whitespace-pre-wrap"
+        >
+          {renderInline(model, `item-${index}-`)}
+        </li>
+      ))}
+    </ListTag>
   )
 }
 
@@ -417,6 +646,25 @@ function ReadonlyBlock({
   )
 }
 
+function applyFormat(command: 'bold' | 'italic' | 'underline'): void {
+  try {
+    document.execCommand(command)
+  } catch {
+    /* unsupported browser command */
+  }
+}
+
+function applyCode(): void {
+  const selection = window.getSelection()
+  if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return
+  const text = selection.toString()
+  try {
+    document.execCommand('insertHTML', false, `<code>${escapeHtml(text)}</code>`)
+  } catch {
+    /* ignore */
+  }
+}
+
 export default function VisualEditor({
   content,
   fileName,
@@ -448,11 +696,53 @@ export default function VisualEditor({
 
   return (
     <div className="h-full overflow-auto bg-[var(--panel-3)] px-6 py-6">
+      <div className="sticky top-0 z-10 mx-auto mb-3 flex max-w-[860px] flex-wrap items-center gap-1 rounded-lg border border-zinc-200 bg-white/95 px-3 py-2 text-xs shadow-sm backdrop-blur">
+        <span className="mr-1 text-zinc-500">Format</span>
+        <button
+          type="button"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => applyFormat('bold')}
+          className="rounded-md border border-zinc-200 px-2 py-0.5 font-bold text-zinc-700 hover:bg-zinc-100"
+          title="Bold (Ctrl/Cmd+B)"
+        >
+          B
+        </button>
+        <button
+          type="button"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => applyFormat('italic')}
+          className="rounded-md border border-zinc-200 px-2 py-0.5 italic text-zinc-700 hover:bg-zinc-100"
+          title="Italic (Ctrl/Cmd+I)"
+        >
+          I
+        </button>
+        <button
+          type="button"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => applyFormat('underline')}
+          className="rounded-md border border-zinc-200 px-2 py-0.5 underline text-zinc-700 hover:bg-zinc-100"
+          title="Underline (Ctrl/Cmd+U)"
+        >
+          U
+        </button>
+        <button
+          type="button"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={applyCode}
+          className="rounded-md border border-zinc-200 px-2 py-0.5 font-[var(--font-mono)] text-[11px] text-zinc-700 hover:bg-zinc-100"
+          title="Monospace / \texttt"
+        >
+          {'</>'}
+        </button>
+        <span className="ml-2 text-[10px] text-zinc-400">
+          Select text in a paragraph or list item
+        </span>
+      </div>
       <div className="mx-auto max-w-[860px] rounded-lg bg-white px-10 py-8 shadow-[var(--shadow-md)]">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 pb-2 text-[10px] text-zinc-400">
           <span className="truncate font-[var(--font-mono)]">{fileName || 'LaTeX document'}</span>
           <span className="shrink-0">
-            Click paragraphs and headings to edit · complex blocks are read-only
+            Click text, list items or equations to edit · use B/I/U for formatting
           </span>
         </div>
         <div className="latex-visual">
@@ -470,11 +760,23 @@ export default function VisualEditor({
                 />
               )
             }
-            if (block.kind === 'paragraph') {
+            if (block.kind === 'formatted') {
               return (
-                <EditableParagraph
+                <EditableFormattedParagraph
                   key={key}
-                  text={block.text}
+                  model={block.model}
+                  from={block.from}
+                  to={block.to}
+                  onEdit={onEditBlock}
+                />
+              )
+            }
+            if (block.kind === 'list') {
+              return (
+                <EditableList
+                  key={key}
+                  ordered={block.ordered}
+                  items={block.items}
                   from={block.from}
                   to={block.to}
                   onEdit={onEditBlock}
