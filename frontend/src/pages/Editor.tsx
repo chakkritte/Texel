@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import Icon from '../components/shell/Icon'
 import { api, getToken } from '../lib/api'
@@ -21,6 +21,8 @@ import { AiPanel, type AiRequest, type Selection } from '../components/ai'
 import type { SelectionAction } from '../components/SelectionToolbar'
 import IconRail, { type PanelTab } from '../components/shell/IconRail'
 import StatusBar from '../components/shell/StatusBar'
+
+const VisualDocument = lazy(() => import('../components/VisualDocument'))
 
 type EditorSelectionRange = { from: number; to: number; text: string }
 
@@ -128,6 +130,7 @@ export default function Editor() {
   const [equationInitial, setEquationInitial] = useState('')
   const [equationMode, setEquationMode] = useState<EquationMode>('inline')
   const [visualMode, setVisualMode] = useState(false)
+  const [visualTab, setVisualTab] = useState<'document' | 'pdf'>('document')
   const [openTabs, setOpenTabs] = useState<FileT[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   const active = openTabs.find((file) => file.id === activeId) ?? null
@@ -943,7 +946,10 @@ export default function Editor() {
         </div>
 
         <button
-          onClick={() => setVisualMode((value) => !value)}
+          onClick={() => {
+            if (!visualMode) setVisualTab('document')
+            setVisualMode(!visualMode)
+          }}
           title={
             visualMode
               ? 'Back to the source editor'
@@ -1322,17 +1328,74 @@ export default function Editor() {
           style={visualMode ? undefined : { width: `${pdfSize}%` }}
           className={
             visualMode
-              ? 'min-w-0 flex-1 overflow-hidden bg-[var(--panel)]'
+              ? 'flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--panel)]'
               : 'min-w-[320px] shrink-0 overflow-hidden bg-[var(--panel)]'
           }
         >
-          <PdfViewer
-            url={pdfUrl}
-            compiling={compiling}
-            highlight={pdfHighlight}
-            onInverseSearch={inverseSearch}
-            onPageChange={(page, total) => setPdfPage({ page, total })}
-          />
+          {visualMode ? (
+            <>
+              <div className="flex h-11 shrink-0 items-center gap-1 border-b border-[var(--border)] px-2">
+                <button
+                  onClick={() => setVisualTab('document')}
+                  className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] transition-colors ${
+                    visualTab === 'document'
+                      ? 'bg-[var(--accent-soft)] font-medium text-[var(--accent)]'
+                      : 'text-[var(--muted)] hover:bg-[var(--panel-3)] hover:text-[var(--ink)]'
+                  }`}
+                >
+                  <Icon name="description" size={14} /> Document
+                </button>
+                <button
+                  onClick={() => setVisualTab('pdf')}
+                  className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] transition-colors ${
+                    visualTab === 'pdf'
+                      ? 'bg-[var(--accent-soft)] font-medium text-[var(--accent)]'
+                      : 'text-[var(--muted)] hover:bg-[var(--panel-3)] hover:text-[var(--ink)]'
+                  }`}
+                >
+                  <Icon name="picture_as_pdf" size={14} /> PDF
+                </button>
+                <span className="ml-auto pr-1 text-[10px] text-[var(--muted)]">
+                  Read-only visual view
+                </span>
+              </div>
+              <div className="min-h-0 flex-1">
+                {visualTab === 'document' ? (
+                  active && isTextFile(active) ? (
+                    <Suspense
+                      fallback={
+                        <div className="flex h-full items-center justify-center text-sm text-[var(--muted)]">
+                          Loading visual view…
+                        </div>
+                      }
+                    >
+                      <VisualDocument content={content} fileName={active.name} />
+                    </Suspense>
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-sm text-[var(--muted)]">
+                      Open a text file to see the visual view.
+                    </div>
+                  )
+                ) : (
+                  <PdfViewer
+                    url={pdfUrl}
+                    compiling={compiling}
+                    highlight={pdfHighlight}
+                    onInverseSearch={inverseSearch}
+                    onPageChange={(page, total) => setPdfPage({ page, total })}
+                  />
+                )}
+              </div>
+            </>
+          ) : (
+            <PdfViewer
+              url={pdfUrl}
+              compiling={compiling}
+              highlight={pdfHighlight}
+              onInverseSearch={inverseSearch}
+              onPageChange={(page, total) => setPdfPage({ page, total })}
+            />
+          )}
         </section>
       </div>
 

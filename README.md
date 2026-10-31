@@ -11,7 +11,7 @@ assistant.
 - CodeMirror 6 editor for `.tex`, `.bib`, `.sty`, `.cls` and other text files
 - PDF preview with forward/inverse SyncTeX
 - Equation builder popup with a visual toolbar and live preview (CodeCogs)
-- Visual preview mode (read-only) with click-to-source via SyncTeX
+- Visual preview mode with a read-only rendered Document view (Phase 3.1) and PDF/SyncTeX
 - Compilation with a configurable engine:
   - `pdflatex`, `xelatex`, `lualatex` via TeX Live + `latexmk`
   - Tectonic as a fallback
@@ -76,6 +76,9 @@ docker-compose.yml Local deployment
 - The equation builder uses the free CodeCogs equation-editor API. CodeCogs
   displays a retirement notice for this API; moving to fxEditor requires a
   domain-bound licence. The editor is an equation tool only.
-- Full-document editable WYSIWYG is not shipped yet. See
+- The Visual mode Document tab is a read-only rendered view of the active file
+  (Phase 3.1): common text, lists and math are rendered; unknown macros degrade
+  gracefully and only the active file is shown. Full-document editable WYSIWYG
+  is not shipped yet. See
   [`docs/visual-editor-plan.md`](docs/visual-editor-plan.md) for the
   architecture, safety constraints and phased delivery plan.

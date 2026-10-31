@@ -96,12 +96,31 @@ destroy unsupported LaTeX.
   switches back to source mode at the corresponding line.
 - Errors from the round-trip parser appear in a problems panel.
 
+## Current status (Phase 3.1 delivered)
+
+Visual mode now has two tabs: **Document** (rendered from the active `.tex`
+file) and **PDF**.
+
+Implemented with:
+
+- `@unified-latex/unified-latex-to-hast` for AST → HTML conversion.
+- KaTeX for inline and display math.
+- Small macro replacements for common IEEE macros (`\uppercase`,
+  `\authorrefmark`, `\IEEEmembership`, `\textsuperscript`).
+
+Known limitations of this phase:
+
+- Only the active file is rendered; `\input`/`\include` are not expanded.
+- Images, citations and references are not resolved to project assets.
+- Unknown macros degrade to text or empty spans; the view is read-only.
+- There is no source-position mapping yet, so editing is deliberately disabled.
+
 ## Delivery phases
 
-### Phase 3.1 — Read-only visual AST (1–2 weeks)
+### Phase 3.1 — Read-only visual AST (1–2 weeks) — delivered
 
 - Parse the current file and render a visual, non-editable view.
-- Unknown constructs render as source blocks.
+- Unknown constructs render as text/source fallbacks.
 - No mutations; useful to validate the parser and rendering.
 
 ### Phase 3.2 — Editable text + math (3–4 weeks)

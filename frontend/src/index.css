@@ -186,6 +186,74 @@ body {
   background: color-mix(in srgb, var(--accent) 5%, white);
 }
 
+/* Read-only visual LaTeX document (Phase 3.1) */
+.latex-visual {
+  color: #1f2937;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 16px;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+.latex-visual h1,
+.latex-visual h2,
+.latex-visual h3,
+.latex-visual h4 {
+  color: #111827;
+  font-family: var(--font-display);
+  line-height: 1.3;
+  margin: 1.4em 0 0.5em;
+}
+.latex-visual h1 { font-size: 1.7rem; }
+.latex-visual h2 { font-size: 1.35rem; }
+.latex-visual h3 { font-size: 1.15rem; }
+.latex-visual h4 { font-size: 1rem; }
+.latex-visual p { margin: 0.75em 0; }
+.latex-visual ul,
+.latex-visual ol {
+  margin: 0.75em 0;
+  padding-left: 1.6em;
+}
+.latex-visual ul { list-style: disc; }
+.latex-visual ol { list-style: decimal; }
+.latex-visual li > p { margin: 0.2em 0; }
+.latex-visual blockquote {
+  border-left: 3px solid #d1d5db;
+  color: #4b5563;
+  margin: 1em 0;
+  padding-left: 1em;
+}
+.latex-visual .inline-math { white-space: nowrap; }
+.latex-visual .display-math {
+  margin: 1.2em 0;
+  overflow-x: auto;
+  text-align: center;
+}
+.latex-visual .katex-display { margin: 0.4em 0; }
+.latex-visual .macro-cite,
+.latex-visual .macro-ref { color: #2563eb; }
+.latex-visual .macro-unknownmacro,
+.latex-visual .macro { color: #374151; }
+.latex-visual pre {
+  background: #f3f4f6;
+  border-radius: 0.4rem;
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+  line-height: 1.5;
+  overflow-x: auto;
+  padding: 0.75em 1em;
+}
+.latex-visual img { max-width: 100%; }
+.latex-visual table {
+  border-collapse: collapse;
+  font-size: 0.9em;
+  margin: 1em 0;
+}
+.latex-visual td,
+.latex-visual th {
+  border: 1px solid #d1d5db;
+  padding: 0.35em 0.6em;
+}
+
 .font-display {
   font-family: var(--font-display);
 }
