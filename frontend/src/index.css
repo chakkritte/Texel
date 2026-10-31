@@ -1,0 +1,309 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Work+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=swap');
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ============================================================
+   Serene UI Kit — Material Design 3 tokens (MIT, Serene Lab)
+   Light palette as shipped; dark palette derived to match.
+   ============================================================ */
+:root {
+  --color-on-secondary: #ffffff;
+  --color-inverse-primary: #c2c8c6;
+  --color-surface-container-high: #e2eae4;
+  --color-surface-variant: #dde4de;
+  --color-error: #ba1a1a;
+  --color-surface-container-highest: #dde4de;
+  --color-on-secondary-fixed: #0a1f18;
+  --color-secondary-fixed: #d0e8dc;
+  --color-primary-fixed: #dee4e2;
+  --color-inverse-surface: #2b322e;
+  --color-tertiary: #504542;
+  --color-error-container: #ffdad6;
+  --color-surface-container-lowest: #ffffff;
+  --color-primary-fixed-dim: #c2c8c6;
+  --color-on-tertiary-container: #e6d5d1;
+  --color-on-primary-container: #d5dad9;
+  --color-on-background: #161d19;
+  --color-surface-container-low: #eef6ef;
+  --color-background: #f3fbf5;
+  --color-tertiary-fixed: #f0dfdb;
+  --color-secondary-fixed-dim: #b4ccc0;
+  --color-outline: #737877;
+  --color-on-tertiary-fixed-variant: #4f4442;
+  --color-surface: #f3fbf5;
+  --color-primary: #424847;
+  --color-on-error: #ffffff;
+  --color-tertiary-fixed-dim: #d3c3bf;
+  --color-on-secondary-fixed-variant: #364b42;
+  --color-outline-variant: #c3c7c6;
+  --color-secondary: #4d635a;
+  --color-secondary-container: #cde5d9;
+  --color-surface-container: #e8f0e9;
+  --color-primary-container: #5a605f;
+  --color-surface-bright: #f3fbf5;
+  --color-surface-dim: #d4dcd6;
+  --color-on-tertiary: #ffffff;
+  --color-on-surface: #161d19;
+  --color-on-error-container: #93000a;
+  --color-on-secondary-container: #52675e;
+  --color-inverse-on-surface: #ebf3ec;
+  --color-on-tertiary-fixed: #221a17;
+  --color-on-surface-variant: #434847;
+  --color-on-primary-fixed: #171d1c;
+  --color-on-primary-fixed-variant: #424847;
+  --color-on-primary: #ffffff;
+  --color-surface-tint: #5a605f;
+  --color-tertiary-container: #685c59;
+  --color-custom-blush: #f4d0d4;
+  --color-custom-mint: #cce4d8;
+  --color-custom-sky: #b6d2e8;
+  --color-custom-gray: #5a605f;
+  --color-success: #2e7d32;
+  --color-warning: #f59e0b;
+  --color-info: #2563eb;
+
+  /* App aliases used across the LaTeX Studio components */
+  --app-bg: var(--color-background);
+  --panel: var(--color-surface-container-lowest);
+  --panel-2: var(--color-surface-container-low);
+  --panel-3: var(--color-surface-container);
+  --border: color-mix(in srgb, var(--color-primary) 9%, transparent);
+  --border-strong: var(--color-outline-variant);
+  --ink: var(--color-on-surface);
+  --ink-2: var(--color-on-surface-variant);
+  --muted: color-mix(in srgb, var(--color-on-surface-variant) 78%, var(--color-background));
+  --muted-2: var(--color-outline);
+  --accent: var(--color-secondary);
+  --accent-2: color-mix(in srgb, var(--color-secondary) 82%, black);
+  --accent-ink: var(--color-on-secondary);
+  --accent-soft: var(--color-secondary-container);
+  --danger: var(--color-error);
+  --danger-soft: var(--color-error-container);
+  --warn: #b45309;
+  --warn-soft: #fef3c7;
+  --ok: var(--color-success);
+  --ok-soft: #e8f5e9;
+  --shadow-sm: 0 1px 2px rgba(22, 29, 25, 0.05), 0 4px 12px rgba(22, 29, 25, 0.04);
+  --shadow-md: 0 4px 12px rgba(22, 29, 25, 0.08), 0 12px 32px rgba(22, 29, 25, 0.06);
+  --shadow-lg: 0 16px 40px rgba(22, 29, 25, 0.16);
+  --radius: 0.75rem;
+  --font-sans: "Work Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Manrope", var(--font-sans);
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.dark {
+  --color-background: #0f1411;
+  --color-surface: #0f1411;
+  --color-surface-container-lowest: #101512;
+  --color-surface-container-low: #161d18;
+  --color-surface-container: #1c241e;
+  --color-surface-container-high: #242d27;
+  --color-surface-container-highest: #2c352f;
+  --color-surface-variant: #2c352f;
+  --color-on-background: #e3ebe5;
+  --color-on-surface: #e3ebe5;
+  --color-on-surface-variant: #b5bfb8;
+  --color-primary: #c2c8c6;
+  --color-on-primary: #171d1c;
+  --color-primary-container: #5a605f;
+  --color-on-primary-container: #d5dad9;
+  --color-secondary: #9fd3bf;
+  --color-on-secondary: #0a1f18;
+  --color-secondary-container: #22352d;
+  --color-on-secondary-container: #b7dccb;
+  --color-outline: #8b968f;
+  --color-outline-variant: #3a443d;
+  --color-error: #ffb4ab;
+  --color-error-container: #411b18;
+  --color-on-error-container: #ffdad6;
+  --color-custom-mint: #2b4a3c;
+  --color-custom-sky: #24384a;
+  --color-custom-blush: #4a2c30;
+  --warn: #fbbf24;
+  --warn-soft: #2a2110;
+  --ok: #7ddc9a;
+  --ok-soft: #0f2a1d;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 6px 18px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 18px 48px rgba(0, 0, 0, 0.6);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--app-bg);
+  color: var(--ink);
+  font-size: 15px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ------------------------------------------------------------------
+   Readability: slightly larger UI typography.
+   These unlayered rules intentionally override Tailwind's font-size
+   utilities. The code editor is pinned to 14px separately so only the
+   surrounding interface grows.
+   ------------------------------------------------------------------ */
+.text-xs {
+  font-size: 0.8125rem; /* 12px -> 13px */
+  line-height: 1.25rem;
+}
+.text-sm {
+  font-size: 0.9375rem; /* 14px -> 15px */
+  line-height: 1.5rem;
+}
+.text-\[10px\] {
+  font-size: 0.75rem; /* 10px -> 12px */
+  line-height: 1.1rem;
+}
+.text-\[11px\] {
+  font-size: 0.8125rem; /* 11px -> 13px */
+  line-height: 1.25rem;
+}
+.text-\[13px\] {
+  font-size: 0.875rem; /* 13px -> 14px */
+  line-height: 1.35rem;
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+.font-label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+.material-symbols-outlined {
+  font-variation-settings:
+    'FILL' 0,
+    'wght' 400,
+    'GRAD' 0,
+    'opsz' 24;
+  line-height: 1;
+  user-select: none;
+}
+
+.doodle-border {
+  border: 2px solid var(--color-primary);
+  border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+}
+
+.serene-card {
+  background: var(--panel);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 8%, transparent);
+  border-radius: 1rem;
+  box-shadow: var(--shadow-sm);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-secondary) 28%, transparent);
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-secondary);
+  outline-offset: 2px;
+}
+
+/* PDF pages */
+.pdf-page {
+  background: #fff;
+  box-shadow:
+    0 1px 2px rgba(22, 29, 25, 0.1),
+    0 10px 28px rgba(22, 29, 25, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.dark .pdf-page {
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.5),
+    0 12px 32px rgba(0, 0, 0, 0.55);
+}
+
+.synctex-marker {
+  position: absolute;
+  border: 2px solid var(--color-secondary);
+  background: color-mix(in srgb, var(--color-secondary) 18%, transparent);
+  border-radius: 4px;
+  pointer-events: none;
+  transition: all 120ms ease-out;
+}
+
+/* Bridge utility colors used by embedded feature panels to the Serene palette */
+.bg-emerald-600 { background-color: var(--color-secondary) !important; }
+.text-emerald-700,
+.text-emerald-800 { color: var(--color-secondary) !important; }
+.bg-emerald-50 { background-color: var(--color-secondary-container) !important; }
+.dark .bg-white { background-color: var(--panel) !important; }
+.dark .bg-zinc-50 { background-color: var(--panel-2) !important; }
+.dark .bg-zinc-100 { background-color: var(--panel-3) !important; }
+.dark .bg-zinc-200 { background-color: var(--border) !important; }
+.dark .text-zinc-900,
+.dark .text-zinc-800,
+.dark .text-zinc-700 { color: var(--ink) !important; }
+.dark .text-zinc-600,
+.dark .text-zinc-500 { color: var(--muted) !important; }
+.dark .text-zinc-400 { color: var(--muted-2) !important; }
+.dark .border-zinc-200,
+.dark .border-zinc-300 { border-color: var(--border) !important; }
+.dark .bg-emerald-600 { background-color: var(--color-secondary) !important; }
+.dark .text-emerald-700,
+.dark .text-emerald-800 { color: var(--color-secondary) !important; }
+.dark .bg-emerald-50 { background-color: var(--color-secondary-container) !important; }
+.dark .text-red-600,
+.dark .text-red-700 { color: var(--danger) !important; }
+.dark .bg-red-50 { background-color: var(--danger-soft) !important; }
+.dark .text-amber-600 { color: var(--warn) !important; }
+.dark .bg-amber-50 { background-color: var(--warn-soft) !important; }
+
+/* Track changes decorations */
+.cm-track-add {
+  background: color-mix(in srgb, #2e7d32 16%, transparent);
+  border-radius: 2px;
+}
+.cm-track-del {
+  color: var(--danger);
+  text-decoration: line-through;
+  opacity: 0.75;
+  margin: 0 1px;
+}
+.dark .cm-track-add {
+  background: color-mix(in srgb, #7ddc9a 22%, transparent);
+}

@@ -1,0 +1,44 @@
+{
+  "name": "latex-studio-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@codemirror/autocomplete": "^6.18.4",
+    "@codemirror/commands": "^6.7.1",
+    "@codemirror/language": "^6.10.8",
+    "@codemirror/legacy-modes": "^6.4.2",
+    "@codemirror/search": "^6.5.8",
+    "@codemirror/state": "^6.5.0",
+    "@codemirror/theme-one-dark": "^6.1.2",
+    "@codemirror/view": "^6.36.0",
+    "@tanstack/react-query": "^5.62.0",
+    "clsx": "^2.1.1",
+    "cmdk": "^1.0.4",
+    "diff": "^7.0.0",
+    "lucide-react": "^0.468.0",
+    "pdfjs-dist": "^4.10.38",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.28.0",
+    "y-codemirror.next": "^0.3.5",
+    "y-indexeddb": "^9.0.12",
+    "y-protocols": "^1.0.6",
+    "yjs": "^13.6.20",
+    "zustand": "^5.0.2"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.3"
+  }
+}

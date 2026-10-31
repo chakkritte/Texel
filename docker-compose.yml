@@ -1,0 +1,88 @@
+name: latex-studio
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: studio
+      POSTGRES_PASSWORD: studio
+      POSTGRES_DB: studio
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U studio -d studio"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    mem_limit: 1536m
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    mem_limit: 512m
+
+  api:
+    build: ./backend
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    ports:
+      - "127.0.0.1:9000:8000"
+    volumes:
+      - ./data:/data
+    mem_limit: 1g
+
+  collab:
+    build: ./backend
+    restart: unless-stopped
+    command: ["uvicorn", "app.collab.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    ports:
+      - "127.0.0.1:9001:8000"
+    volumes:
+      - ./data:/data
+    mem_limit: 1536m
+    cpus: 1.5
+
+  worker:
+    build: ./backend
+    restart: unless-stopped
+    command: ["arq", "app.worker.WorkerSettings"]
+    env_file: .env
+    environment:
+      HOST_DATA_DIR: /home/sgtech/proj/latex-studio/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ./data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    mem_limit: 512m
+
+  web:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "127.0.0.1:9002:80"
+    mem_limit: 64m
+
+volumes:
+  pgdata:
+  redisdata:

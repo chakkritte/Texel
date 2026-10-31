@@ -1,0 +1,24 @@
+# Secrets / local configuration
+.env
+.env.*
+!.env.example
+
+# Runtime data: uploaded projects, compile output, version snapshots, caches
+/data/
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+
+# Frontend
+node_modules/
+dist/
+.vite/
+
+# OS / editors
+.DS_Store
+Thumbs.db
