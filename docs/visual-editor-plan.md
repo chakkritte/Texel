@@ -96,10 +96,9 @@ destroy unsupported LaTeX.
   switches back to source mode at the corresponding line.
 - Errors from the round-trip parser appear in a problems panel.
 
-## Current status (Phase 3.1 delivered)
+## Current status (Phase 3.1 + 3.2a delivered)
 
-Visual mode now has two tabs: **Document** (rendered from the active `.tex`
-file) and **PDF**.
+Visual mode now has two tabs: **Document** (the visual editor) and **PDF**.
 
 Implemented with:
 
@@ -107,13 +106,22 @@ Implemented with:
 - KaTeX for inline and display math.
 - Small macro replacements for common IEEE macros (`\uppercase`,
   `\authorrefmark`, `\IEEEmembership`, `\textsuperscript`).
+- AST source offsets for mapping plain paragraphs and section headings back to
+  the `.tex` source.
+- Inline editing for plain paragraphs and headings; edits are escaped and
+  written back through CodeMirror (so collaboration, undo and autosave work).
+- No-op blurs are ignored to avoid spurious source changes.
+- Complex blocks (math, lists, environments, macros) are rendered read-only
+  with an "Edit in source" jump.
 
 Known limitations of this phase:
 
+- Only plain text paragraphs/headings are editable; inline math, formatting,
+  lists and environments remain read-only.
 - Only the active file is rendered; `\input`/`\include` are not expanded.
 - Images, citations and references are not resolved to project assets.
-- Unknown macros degrade to text or empty spans; the view is read-only.
-- There is no source-position mapping yet, so editing is deliberately disabled.
+- Unknown macros degrade to text or empty spans.
+- Rich-text commands (bold/italic) cannot be created from the visual view yet.
 
 ## Delivery phases
 
@@ -123,12 +131,16 @@ Known limitations of this phase:
 - Unknown constructs render as text/source fallbacks.
 - No mutations; useful to validate the parser and rendering.
 
-### Phase 3.2 — Editable text + math (3–4 weeks)
+### Phase 3.2 — Editable text + math (3–4 weeks) — text/headings delivered, math pending
 
-- ProseMirror editing for paragraphs, headings, emphasis, lists and math.
-- Serializer with verbatim preservation of unchanged source slices.
-- Round-trip tests on a corpus of real thesis/article files.
-- "Edit in source" fallback for unsupported nodes.
+- Plain paragraph/heading editing with AST source ranges and safe escaping
+  (delivered).
+- Read-only rendering and "Edit in source" fallback for complex blocks
+  (delivered).
+- Inline math/formatting editing and list editing (pending).
+- Serializer with verbatim preservation of unchanged source slices (partially
+  delivered: unchanged blocks are never rewritten).
+- Round-trip tests on a corpus of real thesis/article files (pending).
 
 ### Phase 3.3 — Structure and collaboration (3–4 weeks)
 

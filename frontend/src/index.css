@@ -253,6 +253,28 @@ body {
   border: 1px solid #d1d5db;
   padding: 0.35em 0.6em;
 }
+.latex-visual .visual-editable {
+  border-radius: 4px;
+  cursor: text;
+  outline: none;
+  transition:
+    background 120ms ease,
+    box-shadow 120ms ease;
+}
+.latex-visual .visual-editable:hover {
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+.latex-visual .visual-editable:focus {
+  background: color-mix(in srgb, var(--accent) 8%, white);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.latex-visual .visual-readonly {
+  border-radius: 4px;
+}
+.latex-visual .visual-readonly:hover {
+  box-shadow: 0 0 0 1px #e5e7eb;
+}
 
 .font-display {
   font-family: var(--font-display);

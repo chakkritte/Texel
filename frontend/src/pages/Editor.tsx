@@ -22,7 +22,7 @@ import type { SelectionAction } from '../components/SelectionToolbar'
 import IconRail, { type PanelTab } from '../components/shell/IconRail'
 import StatusBar from '../components/shell/StatusBar'
 
-const VisualDocument = lazy(() => import('../components/VisualDocument'))
+const VisualEditor = lazy(() => import('../components/VisualEditor'))
 
 type EditorSelectionRange = { from: number; to: number; text: string }
 
@@ -125,6 +125,12 @@ export default function Editor() {
   const [insertRequest, setInsertRequest] = useState<{ text: string; nonce: number } | null>(
     null,
   )
+  const [replaceRequest, setReplaceRequest] = useState<{
+    from: number
+    to: number
+    text: string
+    nonce: number
+  } | null>(null)
   const [equationOpen, setEquationOpen] = useState(false)
   const [equationNonce, setEquationNonce] = useState(0)
   const [equationInitial, setEquationInitial] = useState('')
@@ -215,6 +221,7 @@ export default function Editor() {
     setAiRequest(null)
     setEditorSelection(null)
     setEquationOpen(false)
+    setReplaceRequest(null)
   }, [active?.id])
 
   function handleSelectionAction(action: SelectionAction, selection: Selection) {
@@ -230,6 +237,15 @@ export default function Editor() {
     setEquationMode(detectEquationMode(selected))
     setEquationNonce((value) => value + 1)
     setEquationOpen(true)
+  }
+
+  function editVisualBlock(from: number, to: number, text: string) {
+    setReplaceRequest({ from, to, text, nonce: Date.now() })
+  }
+
+  function editSourceAt(line: number) {
+    setVisualMode(false)
+    setJump({ line, column: 0, nonce: Date.now() })
   }
 
   function insertEquation(latex: string, mode: EquationMode) {
@@ -953,7 +969,7 @@ export default function Editor() {
           title={
             visualMode
               ? 'Back to the source editor'
-              : 'Visual preview (read-only) — click the PDF to jump to source'
+              : 'Visual editor — edit text blocks, or click the PDF to jump to source'
           }
           className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-colors ${
             visualMode
@@ -1257,6 +1273,8 @@ export default function Editor() {
                   onSelectionRange={setEditorSelection}
                   insertRequest={insertRequest}
                   onInsertApplied={() => setInsertRequest(null)}
+                  replaceRequest={replaceRequest}
+                  onReplaceApplied={() => setReplaceRequest(null)}
                   onCursor={(line, column) => setCursor({ line, column })}
                   onChange={(value) => {
                     setContent(value)
@@ -1356,7 +1374,7 @@ export default function Editor() {
                   <Icon name="picture_as_pdf" size={14} /> PDF
                 </button>
                 <span className="ml-auto pr-1 text-[10px] text-[var(--muted)]">
-                  Read-only visual view
+                  Visual editor · text blocks
                 </span>
               </div>
               <div className="min-h-0 flex-1">
@@ -1369,7 +1387,12 @@ export default function Editor() {
                         </div>
                       }
                     >
-                      <VisualDocument content={content} fileName={active.name} />
+                      <VisualEditor
+                        content={content}
+                        fileName={active.name}
+                        onEditBlock={editVisualBlock}
+                        onEditSource={editSourceAt}
+                      />
                     </Suspense>
                   ) : (
                     <div className="flex h-full items-center justify-center text-sm text-[var(--muted)]">

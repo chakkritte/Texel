@@ -53,6 +53,9 @@ type Props = {
   /** Insert (and optionally replace the current selection with) text. */
   insertRequest?: { text: string; nonce: number } | null
   onInsertApplied?: () => void
+  /** Replace a source range (used by the visual editor). */
+  replaceRequest?: { from: number; to: number; text: string; nonce: number } | null
+  onReplaceApplied?: () => void
 }
 
 type ToolbarState = {
@@ -78,6 +81,8 @@ export default function CodeMirrorEditor({
   onSelectionRange,
   insertRequest = null,
   onInsertApplied,
+  replaceRequest = null,
+  onReplaceApplied,
 }: Props) {
   const host = useRef<HTMLDivElement>(null)
   const view = useRef<EditorView | null>(null)
@@ -291,6 +296,17 @@ export default function CodeMirrorEditor({
     onInsertApplied?.()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [insertRequest])
+
+  useEffect(() => {
+    const instance = view.current
+    if (!instance || !replaceRequest) return
+    const length = instance.state.doc.length
+    const from = Math.min(Math.max(0, replaceRequest.from), length)
+    const to = Math.min(Math.max(from, replaceRequest.to), length)
+    instance.dispatch({ changes: { from, to, insert: replaceRequest.text } })
+    onReplaceApplied?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [replaceRequest])
 
   return (
     <div className="relative h-full">
